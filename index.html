@@ -3,310 +3,725 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Koi Pond</title>
+<title>Koi Pond 3D</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #2fb7c9; }
-  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: none; touch-action: none; }
-  #hint { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); font: 13px system-ui, sans-serif;
-          color: #fff; background: rgba(0,60,80,.45); padding: 6px 14px; border-radius: 20px; transition: opacity 1.5s; pointer-events: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b4a55; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+  #bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 5; transition: opacity .6s; }
+  #bar button { font: 600 13px system-ui, sans-serif; color: #fff; background: rgba(5,45,58,.55); border: 1px solid rgba(255,255,255,.25);
+    padding: 8px 14px; border-radius: 22px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #bar button:hover { background: rgba(10,80,100,.7); }
+  #bar button.on { background: rgba(255,120,150,.75); border-color: #fff; }
+  #menu { position: fixed; left: 50%; bottom: 62px; transform: translateX(-50%); display: none; flex-direction: column; gap: 6px; z-index: 6;
+    background: rgba(5,45,58,.8); padding: 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(10px); }
+  #menu button { font: 500 13px system-ui, sans-serif; color: #fff; background: rgba(255,255,255,.12); border: 0; padding: 9px 14px; border-radius: 10px; cursor: pointer; text-align: left; }
+  #menu button:hover { background: rgba(255,255,255,.25); }
+  #menu small { color: #bfe; font-size: 11px; max-width: 250px; line-height: 1.35; }
+  #msg { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); color: #fff; font-size: 13px; background: rgba(5,45,58,.6); padding: 6px 14px; border-radius: 18px; opacity: 0; transition: opacity .5s; pointer-events: none; z-index: 7; }
+  body.noui #bar, body.noui #menu { display: none !important; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="hint">Move to ripple the water. Click to drop food. F = fullscreen. Space = pause.</div>
-<script>
-(() => {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d');
-  const PIX = 3;                       // one "pixel" of the pond = 3 screen pixels
-  let W, H, img, pondBuf;
-  const mouse = { x: -999, y: -999, active: false };
-  const food = [];                     // pellets on the water
-  const ripples = [];                  // expanding rings
-  let paused = false;
+<div id="bar">
+  <button id="bMusic">🎵 Music mode</button>
+  <button id="bSuit">👙 Swimsuits</button>
+  <button id="bFull">⛶ Fullscreen</button>
+</div>
+<div id="menu">
+  <button id="mTab">🖥️ Tab / system audio (best)</button>
+  <button id="mMic">🎤 Microphone (laptop speakers)</button>
+  <button id="mDemo">🥁 Demo beat (no audio)</button>
+  <small>Tab audio: pick the tab playing your music and tick "Share tab audio". Microphone: play music out loud and allow the mic.</small>
+</div>
+<div id="msg"></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js';
 
-  function resize() {
-    W = Math.ceil(innerWidth / PIX);
-    H = Math.ceil(innerHeight / PIX);
-    canvas.width = W; canvas.height = H;
-    img = ctx.createImageData(W, H);
-    initWorld();
-  }
+/* ---------- setup ---------- */
+const Q = new URLSearchParams(location.search);
+if (Q.get('ui') === '0') document.body.classList.add('noui');
+const FF = parseFloat(Q.get('t') || '0');
+let seed = parseInt(Q.get('seed') || '7');
+function rng() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+const rnd = (a, b) => a + (b - a) * rng();
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
-  // ---------- helpers ----------
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  const pick = a => a[(Math.random() * a.length) | 0];
-  const TAU = Math.PI * 2;
-  function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; }
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
 
-  // ---------- water (caustics) ----------
-  let t = 0;
-  function drawWater() {
-    const d = img.data;
-    let i = 0;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++, i += 4) {
-        const fx = x * 0.028, fy = y * 0.028;
-        const wx = fx + Math.sin(fy * 1.7 + t * 0.6) * 0.9 + Math.sin(fy * 0.6 - t * 0.35) * 1.4;
-        const wy = fy + Math.cos(fx * 1.5 + t * 0.5) * 0.9 + Math.cos(fx * 0.55 + t * 0.3) * 1.4;
-        // two layers of cell-like light lines
-        const a = Math.abs(Math.sin(wx * 2.1 + Math.sin(wy * 1.3)));
-        const b = Math.abs(Math.sin(wy * 2.3 + Math.sin(wx * 1.1 + t * 0.2)));
-        const line = Math.min(a, b);
-        const bands = Math.sin(wx * 0.9 + wy * 0.7) * 0.5 + 0.5;      // big soft waves
-        let r = 38 + bands * 22, g = 178 + bands * 20, bl = 205 + bands * 16;
-        if (line < 0.22) { const k = (0.22 - line) / 0.22; r += 105 * k * k; g += 50 * k * k; bl += 35 * k * k; }
-        d[i] = r; d[i + 1] = g; d[i + 2] = bl; d[i + 3] = 255;
-      }
+const FOV = 38, CAMH = 16;
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 60);
+camera.position.set(0, CAMH, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
+const extent = y => { const hh = Math.tan(FOV / 2 * Math.PI / 180) * (CAMH - y); return { hw: hh * camera.aspect, hh }; };
+
+const underScene = new THREE.Scene();
+const topScene = new THREE.Scene();
+const waterScene = new THREE.Scene();
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+let rt = null;
+
+/* ---------- environment (sky reflections on wet skin) ---------- */
+function makeEnv() {
+  const s = new THREE.Scene();
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: 'varying vec3 vP; void main(){vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader: 'varying vec3 vP; void main(){ vec3 d=normalize(vP); float h=d.y*.5+.5; vec3 c=mix(vec3(.5,.72,.8),vec3(.3,.55,.9),pow(h,1.4)); c+=vec3(1.,.95,.85)*pow(max(dot(d,normalize(vec3(-.4,.8,.45))),0.),48.)*5.; gl_FragColor=vec4(c,1.);}'
+  });
+  s.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), mat));
+  const pm = new THREE.PMREMGenerator(renderer);
+  const tex = pm.fromScene(s, 0.04).texture; pm.dispose();
+  return tex;
+}
+const envTex = makeEnv();
+
+function addLights(scene) {
+  scene.add(new THREE.HemisphereLight(0xcdf3ff, 0x0b3a44, 1.0));
+  const d = new THREE.DirectionalLight(0xfff0d8, 2.6); d.position.set(-6, 12, 4); scene.add(d);
+}
+addLights(underScene); addLights(topScene);
+
+/* ---------- floor (pebbles, algae, pad shadows) ---------- */
+const MAXPADS = 8;
+const floorMat = new THREE.ShaderMaterial({
+  uniforms: { uPads: { value: Array.from({ length: MAXPADS }, () => new THREE.Vector3(0, 0, 0)) } },
+  vertexShader: 'varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }',
+  fragmentShader: `
+    varying vec3 vW; uniform vec3 uPads[${MAXPADS}];
+    float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+    vec2 hash2(vec2 p){ return vec2(hash(p),hash(p+19.7)); }
+    float noise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y); }
+    float fbm(vec2 p){ float a=.5,s=0.; for(int i=0;i<4;i++){ s+=a*noise(p); p*=2.03; a*=.5; } return s; }
+    vec3 pebbles(vec2 p, float sc){
+      vec2 q=p*sc; vec2 ip=floor(q), fp=fract(q);
+      float md=9.; vec2 mid=vec2(0.);
+      for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){
+        vec2 g=vec2(float(i),float(j)); vec2 o=hash2(ip+g);
+        vec2 r=g+o*.8+.1-fp; float d=dot(r,r); if(d<md){ md=d; mid=ip+g; } }
+      float h1=hash(mid);
+      vec3 base=mix(vec3(.10,.09,.07),vec3(.34,.29,.20),h1);
+      base=mix(base,vec3(.16,.20,.17),step(.72,hash(mid+3.))*.9);
+      base=mix(base,vec3(.40,.36,.30),step(.9,hash(mid+8.))*.8);
+      float sh=smoothstep(.2,.0,md);
+      return base*mix(.06,1.25,sh*sh);
     }
-    ctx.putImageData(img, 0, 0);
+    void main(){
+      vec2 p=vW.xz;
+      vec3 col=(pebbles(p,1.3)*.75+pebbles(p+7.,3.2)*.15)*.55;
+      float alg=fbm(p*.35);
+      col=mix(col,vec3(.03,.16,.11),smoothstep(.45,.8,alg)*.55);
+      col*=.75+.5*fbm(p*.9);
+      for(int i=0;i<${MAXPADS};i++){ if(uPads[i].z>0.){ float d=length(p-uPads[i].xy-vec2(.9,-.6)); col*=1.-smoothstep(uPads[i].z,uPads[i].z*.55,d)*.55; } }
+      gl_FragColor=vec4(col,1.);
+    }`
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.frustumCulled = false; underScene.add(floor);
+
+/* ---------- water surface shader (refraction, ripples, caustics, glints) ---------- */
+const NR = 10;
+const waterMat = new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: {
+    tRT: { value: null }, uT: { value: 0 }, uAsp: { value: 1 }, uGlow: { value: 0 },
+    uR: { value: Array.from({ length: NR }, () => new THREE.Vector4(0, 0, -100, 0)) },
+    uM: { value: new THREE.Vector3(0, 0, 0) }
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv; uniform sampler2D tRT; uniform float uT,uAsp,uGlow; uniform vec4 uR[${NR}]; uniform vec3 uM;
+    float H(vec2 p){
+      float h=0.;
+      h+=sin(p.x*22.+uT*.9+sin(p.y*9.+uT*.5)*1.5)*.0011;
+      h+=sin(p.y*31.-uT*1.1+p.x*6.)*.0007;
+      h+=sin((p.x+p.y)*47.+uT*1.7)*.0004;
+      for(int i=0;i<${NR};i++){
+        vec4 r=uR[i]; float age=uT-r.z;
+        if(r.w>0. && age>0. && age<6.){
+          float d=length(p-r.xy); float f=d-age*.16;
+          h+=sin(f*150.)*exp(-f*f*700.)*exp(-age*.75)*r.w*.0013;
+        }
+      }
+      if(uM.z>0.){
+        float d=length(p-uM.xy); float f=d-.045;
+        h+=exp(-f*f*3500.)*.0036*uM.z;
+        float f2=d-.085; h+=exp(-f2*f2*3500.)*.0016*uM.z;
+      }
+      return h;
+    }
+    float caustic(vec2 uv,float t){
+      vec2 p=mod(uv*6.28318,6.28318)-250.; vec2 i=p; float c=1.; float inten=.005;
+      for(int n=0;n<5;n++){ float tt=t*(1.-(3.5/float(n+1)));
+        i=p+vec2(cos(tt-i.x)+sin(tt+i.y),sin(tt-i.y)+cos(tt+i.x));
+        c+=1./length(vec2(p.x/(sin(i.x+tt)/inten),p.y/(cos(i.y+tt)/inten))); }
+      c/=5.; c=1.17-pow(c,1.4); return pow(abs(c),8.);
+    }
+    void main(){
+      vec2 p=vec2(vUv.x*uAsp,vUv.y);
+      float e=.0016;
+      vec2 n=vec2(H(p+vec2(e,0.))-H(p-vec2(e,0.)),H(p+vec2(0.,e))-H(p-vec2(0.,e)))/(2.*e);
+      vec2 off=n*.05;
+      vec3 col=vec3(texture2D(tRT,vUv+off*1.07).r,texture2D(tRT,vUv+off).g,texture2D(tRT,vUv+off*.93).b);
+      col=mix(col,vec3(.02,.32,.40),.22);
+      col*=vec3(.82,1.0,1.04);
+      float cc=caustic(p*1.5+n*.15,uT*.55);
+      col+=cc*vec3(.28,.62,.60)*(.38+uGlow*.6);
+      vec3 N=normalize(vec3(-n*3.,1.));
+      vec3 Hh=normalize(normalize(vec3(-.4,.5,.75))+vec3(0.,0.,1.));
+      float s=pow(max(dot(N,Hh),0.),420.)*3.2;
+      col+=s*vec3(1.,.97,.9);
+      col+=dot(n,normalize(vec2(-.5,.6)))*.35;
+      col+=vec3(.5,.8,.9)*length(n)*.12;
+      col*=1.-.38*pow(length(vUv-.5)*1.25,2.);
+      col=col/(1.+col*.12);
+      col=pow(max(col,0.),vec3(1./2.2));
+      gl_FragColor=vec4(col,1.);
+    }`
+});
+waterScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), waterMat));
+waterScene.children[0].frustumCulled = false;
+
+let rippleIdx = 0;
+const tmpV = new THREE.Vector3();
+let simT = 0;
+function ripple(wx, wz, amp = 1) {
+  tmpV.set(wx, 1.6, wz).project(camera);
+  waterMat.uniforms.uR.value[rippleIdx].set((tmpV.x * .5 + .5) * camera.aspect, tmpV.y * .5 + .5, simT, amp);
+  rippleIdx = (rippleIdx + 1) % NR;
+}
+
+/* ---------- textures ---------- */
+function blob(ctx, cx, cy, rx, ry, rgb, n = 12) {
+  for (let k = 0; k < n; k++) {
+    const ox = cx + rnd(-rx, rx) * .6, oy = cy + rnd(-ry, ry) * .6, r = rnd(.38, .72) * rx;
+    ctx.save(); ctx.translate(ox, oy); ctx.scale(1, ry / rx);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(.74, `rgba(${rgb},1)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill(); ctx.restore();
   }
+}
+const KINDS = {
+  kohaku:  { fin: 0xf4f1ea },
+  sanke:   { fin: 0xf4f1ea },
+  ogon:    { fin: 0xf2c25a },
+  showa:   { fin: 0xd6cfc8 },
+  tancho:  { fin: 0xf4f1ea },
+  orange:  { fin: 0xff9a4a },
+  shusui:  { fin: 0xa9bccb }
+};
+function makeSkin(kind) {
+  const W = 1024, Hh = 512, c = document.createElement('canvas'); c.width = W; c.height = Hh;
+  const ctx = c.getContext('2d');
+  const back = () => 256 + rnd(-35, 35);
+  if (kind === 'kohaku' || kind === 'sanke' || kind === 'tancho') { ctx.fillStyle = '#f6f3ec'; ctx.fillRect(0, 0, W, Hh); }
+  if (kind === 'showa') { ctx.fillStyle = '#16161a'; ctx.fillRect(0, 0, W, Hh); }
+  if (kind === 'ogon') { const g = ctx.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, '#f1d27a'); g.addColorStop(.5, '#c98a22'); g.addColorStop(1, '#f1d27a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh); }
+  if (kind === 'orange') { ctx.fillStyle = '#ef7a2c'; ctx.fillRect(0, 0, W, Hh); }
+  if (kind === 'shusui') { const g = ctx.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, '#d9e2ea'); g.addColorStop(.5, '#4e6b88'); g.addColorStop(1, '#d9e2ea'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh); }
+  const red = '216,56,32', black = '24,24,28', white = '246,243,236';
+  if (kind === 'kohaku') { for (let i = 0; i < 4; i++) blob(ctx, 120 + i * 230 + rnd(-30, 30), back(), rnd(90, 160), rnd(70, 120), red, 14); }
+  if (kind === 'sanke') {
+    for (let i = 0; i < 3; i++) blob(ctx, 140 + i * 300 + rnd(-30, 30), back(), rnd(100, 160), rnd(70, 110), red, 14);
+    for (let i = 0; i < 4; i++) blob(ctx, 220 + i * 210 + rnd(-40, 40), 256 + rnd(-90, 90), rnd(30, 60), rnd(24, 42), black, 6);
+  }
+  if (kind === 'showa') {
+    for (let i = 0; i < 3; i++) blob(ctx, 130 + i * 330 + rnd(-30, 30), back(), rnd(110, 170), rnd(80, 120), red, 14);
+    blob(ctx, 80, 256, 70, 60, white, 8);
+    for (let i = 0; i < 2; i++) blob(ctx, 330 + i * 380, 256 + rnd(-70, 70), rnd(60, 90), rnd(40, 70), white, 8);
+  }
+  if (kind === 'tancho') blob(ctx, 85, 256, 58, 52, red, 10);
+  if (kind === 'ogon') { for (let i = 0; i < 6; i++) blob(ctx, rnd(60, 960), 256 + rnd(-110, 110), rnd(60, 120), rnd(30, 60), '248,222,130', 6); }
+  if (kind === 'orange') { for (let i = 0; i < 5; i++) blob(ctx, rnd(60, 960), 256 + rnd(-100, 100), rnd(60, 130), rnd(30, 70), i % 2 ? '252,170,90' : '210,70,30', 7); }
+  if (kind === 'shusui') { for (let i = 0; i < 3; i++) blob(ctx, 160 + i * 300, 120 + (i % 2) * 270 + rnd(-20, 20), rnd(70, 120), rnd(30, 50), '232,110,44', 8); }
+  // belly lightening
+  const bg = ctx.createLinearGradient(0, 0, 0, Hh);
+  const ba = kind === 'showa' ? .25 : .5;
+  bg.addColorStop(0, `rgba(255,255,255,${ba})`); bg.addColorStop(.22, 'rgba(255,255,255,0)'); bg.addColorStop(.78, 'rgba(255,255,255,0)'); bg.addColorStop(1, `rgba(255,255,255,${ba})`);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, Hh);
+  // scales
+  for (let y = 4, row = 0; y < Hh; y += 14, row++) for (let x = (row % 2) * 8; x < W; x += 16) {
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI);
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y - 1, 9, 0.1, Math.PI - .1);
+    ctx.strokeStyle = 'rgba(0,0,0,0.07)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+const skinCache = {};
+function skinFor(k) { return skinCache[k] || (skinCache[k] = makeSkin(k)); }
 
-  // ---------- fish ----------
-  const PALETTES = [
-    { base: '#f4f1ea', spots: ['#e8412c', '#e8412c', '#1d1d22'] },   // kohaku / showa
-    { base: '#f4f1ea', spots: ['#e8412c'] },                          // kohaku
-    { base: '#f29a2e', spots: ['#f7d23e', '#ffffff'] },               // orange
-    { base: '#f7c531', spots: ['#f29a2e'] },                          // yellow
-    { base: '#232329', spots: ['#f7c531', '#f7c531', '#ffffff'] },    // black gold
-    { base: '#b8642e', spots: ['#8a4220', '#d98b4e'] },               // brown
-    { base: '#f4f1ea', spots: ['#1d1d22', '#e8412c'] },
-  ];
-  const fishes = [];
-  const SEG = 9;
+function makeFinTex() {
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const ctx = c.getContext('2d'); const id = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = x / (S - 1), v = y / (S - 1);
+    const rays = .5 + .5 * Math.cos(v * Math.PI * 2 * 12 + Math.sin(u * 3) * .4);
+    let a = (.3 + .45 * rays) * (1 - Math.pow(u, 2.6)) * (.45 + .55 * smooth(0, .12, Math.min(v, 1 - v)) );
+    a = Math.max(a, 0);
+    const i = (y * S + x) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; id.data[i + 3] = Math.round(clamp(a, 0, 1) * 255);
+  }
+  ctx.putImageData(id, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const finTex = makeFinTex();
 
-  function makeFish() {
-    const pal = pick(PALETTES);
-    const size = rnd(1.15, 1.7);
-    const f = {
-      x: rnd(0, W), y: rnd(0, H), ang: rnd(0, TAU),
-      speed: rnd(0.22, 0.4), size, pal,
-      phase: rnd(0, TAU), turn: 0, wander: rnd(0, 1000),
-      segs: [], colors: [],
+/* swimsuit fabrics */
+function makeFabric(kind, c1, c2) {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = c1; x.fillRect(0, 0, 128, 128);
+  x.fillStyle = c2;
+  if (kind === 'stripes') for (let i = 0; i < 128; i += 32) x.fillRect(i, 0, 16, 128);
+  if (kind === 'dots') for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { x.beginPath(); x.arc(16 + i * 32 + (j % 2) * 16, 16 + j * 32, 7, 0, 7); x.fill(); }
+  if (kind === 'wave') { x.strokeStyle = c2; x.lineWidth = 8; for (let j = 0; j < 4; j++) { x.beginPath(); for (let i = 0; i <= 128; i += 4) x.lineTo(i, 16 + j * 32 + Math.sin(i / 10) * 8); x.stroke(); } }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+const SUITS = [
+  { fabric: ['stripes', '#ff4f7a', '#ffffff'], style: 'bikini' },
+  { fabric: ['dots', '#25b4f0', '#ffffff'], style: 'trunks' },
+  { fabric: ['wave', '#ffd23d', '#ff6a2b'], style: 'trunks' },
+  { fabric: ['dots', '#8a5cf0', '#ffe6f5'], style: 'bikini' },
+  { fabric: ['stripes', '#1fc28a', '#fff6c8'], style: 'trunks' },
+  { fabric: ['wave', '#ff8fb1', '#ffffff'], style: 'bikini' },
+  { fabric: ['stripes', '#ff6a2b', '#2a3b8f'], style: 'trunks' }
+];
+
+/* ---------- koi ---------- */
+const NR_ = 34, MS = 18;
+const profile = t => t < .3 ? Math.pow(Math.sin(t / .3 * Math.PI / 2), .5) : 1 - .86 * Math.pow((t - .3) / .7, 1.5);
+
+const FIN_TAIL_R = 8, FIN_TAIL_C = 10, FIN_P_R = 5, FIN_P_C = 4;
+function gridIdx(R, C, off, idx) {
+  for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) {
+    const a = off + i * (C + 1) + j, b = a + 1, c = a + (C + 1), d = c + 1;
+    idx.push(a, b, c, b, d, c);
+  }
+}
+
+class Fish {
+  constructor(kind, L, suit) {
+    this.kind = kind; this.L = L; this.W = .12 * L;
+    this.px = 0; this.pz = 0; this.psi = rnd(0, 6.28); this.speed = rnd(.9, 1.4); this.base = this.speed;
+    this.tvS = 0; this.phase = rnd(0, 6.28); this.s1 = rnd(0, 6.28); this.s2 = rnd(0, 6.28); this.s3 = rnd(0, 6.28);
+    this.py = .45; this.kick = 0; this.id = 0;
+    // body
+    const bpos = new Float32Array(NR_ * (MS + 1) * 3), buv = new Float32Array(NR_ * (MS + 1) * 2), bidx = [];
+    for (let i = 0; i < NR_; i++) for (let j = 0; j <= MS; j++) { const k = i * (MS + 1) + j; buv[k * 2] = i / (NR_ - 1); buv[k * 2 + 1] = j / MS; }
+    for (let i = 0; i < NR_ - 1; i++) for (let j = 0; j < MS; j++) { const a = i * (MS + 1) + j, b = a + 1, c = a + MS + 1, d = c + 1; bidx.push(a, b, c, b, d, c); }
+    this.bGeo = new THREE.BufferGeometry();
+    this.bGeo.setAttribute('position', new THREE.BufferAttribute(bpos, 3));
+    this.bGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(bpos.length), 3));
+    this.bGeo.setAttribute('uv', new THREE.BufferAttribute(buv, 2));
+    this.bGeo.setIndex(bidx);
+    this.body = new THREE.Mesh(this.bGeo, new THREE.MeshPhysicalMaterial({
+      map: skinFor(kind), roughness: .42, metalness: kind === 'ogon' ? .35 : 0, clearcoat: .7, clearcoatRoughness: .22,
+      envMap: envTex, envMapIntensity: .75, side: THREE.DoubleSide
+    }));
+    // fins
+    const nT = (FIN_TAIL_R + 1) * (FIN_TAIL_C + 1), nP = (FIN_P_R + 1) * (FIN_P_C + 1);
+    const fpos = new Float32Array((nT + nP * 2) * 3), fuv = new Float32Array((nT + nP * 2) * 2), fidx = [];
+    gridIdx(FIN_TAIL_R, FIN_TAIL_C, 0, fidx); gridIdx(FIN_P_R, FIN_P_C, nT, fidx); gridIdx(FIN_P_R, FIN_P_C, nT + nP, fidx);
+    for (let i = 0; i <= FIN_TAIL_R; i++) for (let j = 0; j <= FIN_TAIL_C; j++) { const k = i * (FIN_TAIL_C + 1) + j; fuv[k * 2] = i / FIN_TAIL_R; fuv[k * 2 + 1] = j / FIN_TAIL_C; }
+    for (let s = 0; s < 2; s++) for (let i = 0; i <= FIN_P_R; i++) for (let j = 0; j <= FIN_P_C; j++) { const k = nT + s * nP + i * (FIN_P_C + 1) + j; fuv[k * 2] = j / FIN_P_C; fuv[k * 2 + 1] = i / FIN_P_R; }
+    this.fGeo = new THREE.BufferGeometry();
+    this.fGeo.setAttribute('position', new THREE.BufferAttribute(fpos, 3));
+    this.fGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(fpos.length), 3));
+    this.fGeo.setAttribute('uv', new THREE.BufferAttribute(fuv, 2));
+    this.fGeo.setIndex(fidx);
+    this.fins = new THREE.Mesh(this.fGeo, new THREE.MeshStandardMaterial({
+      color: KINDS[kind].fin, map: finTex, transparent: true, opacity: .92, side: THREE.DoubleSide, depthWrite: false,
+      roughness: .55, envMap: envTex, envMapIntensity: .35
+    }));
+    this.fins.renderOrder = 3;
+    // shadows
+    this.sbGeo = new THREE.BufferGeometry();
+    this.sbGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bpos.length), 3));
+    this.sbGeo.setIndex(bidx);
+    this.sfGeo = new THREE.BufferGeometry();
+    this.sfGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(fpos.length), 3));
+    this.sfGeo.setAttribute('uv', new THREE.BufferAttribute(fuv, 2));
+    this.sfGeo.setIndex(fidx);
+    this.sBody = new THREE.Mesh(this.sbGeo, new THREE.MeshBasicMaterial({ color: 0x001218, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide }));
+    this.sFins = new THREE.Mesh(this.sfGeo, new THREE.MeshBasicMaterial({ color: 0x001218, map: finTex, transparent: true, opacity: .3, depthWrite: false, side: THREE.DoubleSide }));
+    this.sBody.renderOrder = 1; this.sFins.renderOrder = 2;
+    // eyes
+    const eg = new THREE.SphereGeometry(.03 * L, 12, 10), em = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: .12, envMap: envTex, envMapIntensity: 1 });
+    this.eyes = [new THREE.Mesh(eg, em), new THREE.Mesh(eg, em)];
+    // swimsuit
+    this.suit = this.buildSuit(suit);
+    const all = [this.body, this.fins, this.sBody, this.sFins, ...this.eyes, ...this.suit.meshes];
+    for (const m of all) { m.frustumCulled = false; underScene.add(m); }
+    this.setSuit(false);
+  }
+  buildSuit(def) {
+    const fab = makeFabric(...def.fabric);
+    const mat = new THREE.MeshStandardMaterial({ map: fab, roughness: .55, side: THREE.DoubleSide, envMap: envTex, envMapIntensity: .3 });
+    const bands = def.style === 'bikini' ? [[.235, .30, 1.0], [.50, .62, 1.0]] : [[.50, .68, 1.0]];
+    const R = 6, meshes = [], geos = [];
+    for (const [t0, t1] of bands) {
+      const pos = new Float32Array((R + 1) * (MS + 1) * 3), uv = new Float32Array((R + 1) * (MS + 1) * 2), idx = [];
+      for (let i = 0; i <= R; i++) for (let j = 0; j <= MS; j++) { const k = i * (MS + 1) + j; uv[k * 2] = j / MS * 2; uv[k * 2 + 1] = i / R; }
+      gridIdx(R, MS, 0, idx);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(pos.length), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
+      const m = new THREE.Mesh(g, mat); meshes.push(m); geos.push({ g, t0, t1, R });
+    }
+    return { meshes, geos };
+  }
+  setSuit(on) { this.suitOn = on; for (const m of this.suit.meshes) m.visible = on; }
+  zc(t, A, bias) { return A * (.12 + 1.6 * t * t) * Math.sin(this.phase - 4.2 * t) + bias * this.L * t * t; }
+  ringPt(t, th, rs, A, bias, out, o) {
+    const r = profile(t) * this.W * rs, L = this.L;
+    const up = -Math.cos(th);
+    out[o] = (.5 - t) * L;
+    out[o + 1] = up * r * (up > 0 ? 1.08 : .82);
+    out[o + 2] = Math.sin(th) * r + this.zc(t, A, bias);
+  }
+  update(dt, energy) {
+    const L = this.L, W = this.W;
+    const spd = this.speed;
+    this.phase += dt * (3.2 + spd * 2.6 + energy * 3);
+    const A = L * (.05 + .014 * clamp(spd, 0, 4) + .03 * this.kick + .03 * energy);
+    const bias = this.tvS * .075;
+    const cs = Math.cos(this.psi), sn = Math.sin(this.psi);
+    const bp = this.bGeo.attributes.position.array, sbp = this.sbGeo.attributes.position.array;
+    const tmp = [0, 0, 0];
+    const toWorld = (lx, ly, lz, arr, sarr, o) => {
+      const wx = this.px + lx * cs + lz * sn, wz = this.pz - lx * sn + lz * cs, wy = this.py + ly;
+      arr[o] = wx; arr[o + 1] = wy; arr[o + 2] = wz;
+      sarr[o] = wx + .5 * wy; sarr[o + 1] = .03; sarr[o + 2] = wz - .33 * wy;
     };
-    for (let s = 0; s < SEG; s++) {
-      f.segs.push({ x: f.x - Math.cos(f.ang) * s * 2.2 * size, y: f.y - Math.sin(f.ang) * s * 2.2 * size });
-      f.colors.push(Math.random() < 0.45 ? pick(pal.spots) : pal.base);
+    for (let i = 0; i < NR_; i++) { const t = i / (NR_ - 1);
+      for (let j = 0; j <= MS; j++) { const th = j / MS * Math.PI * 2; this.ringPt(t, th, 1, A, bias, tmp, 0); toWorld(tmp[0], tmp[1], tmp[2], bp, sbp, (i * (MS + 1) + j) * 3); } }
+    this.bGeo.attributes.position.needsUpdate = true; this.sbGeo.attributes.position.needsUpdate = true;
+    this.bGeo.computeVertexNormals();
+    // fins
+    const fp = this.fGeo.attributes.position.array, sfp = this.sfGeo.attributes.position.array;
+    let o = 0;
+    for (let i = 0; i <= FIN_TAIL_R; i++) { const u = i / FIN_TAIL_R;
+      for (let j = 0; j <= FIN_TAIL_C; j++) { const s = -1 + 2 * j / FIN_TAIL_C, as = Math.abs(s);
+        const tEnd = 1.16 + .15 * as, t = .955 + u * (tEnd - .955);
+        const lx = (.5 - t) * L;
+        const zz = this.zc(t, A, bias) + s * L * (.02 + .125 * Math.pow(u, .9)) + .018 * L * Math.sin(u * 8 + s * 3 + this.phase * 1.3) * u;
+        const ly = .03 * L * Math.sin(u * 6 + s * 2 + this.phase * 1.1) * u + s * .01 * L * u;
+        toWorld(lx, ly, zz, fp, sfp, o); o += 3; } }
+    for (let side = -1; side <= 1; side += 2) {
+      const flap = (.3 + .35 * this.kick + .3 * energy) * Math.sin(this.phase * .6 + side * 1.3);
+      const bt = .27, bx = (.5 - bt) * L, by = -.3 * W, bz = side * .85 * W + this.zc(bt, A, bias);
+      for (let i = 0; i <= FIN_P_R; i++) { const a = i / FIN_P_R;
+        for (let j = 0; j <= FIN_P_C; j++) { const b = j / FIN_P_C, chord = 1 - .55 * a;
+          const out = a * .2 * L, ang = .2 + flap;
+          const lx = bx - out * .5 - b * chord * .16 * L;
+          const lz = bz + side * out * Math.cos(ang);
+          const ly = by - out * Math.sin(ang) * .35 + .01 * L * Math.sin(b * 3 + this.phase);
+          toWorld(lx, ly, lz, fp, sfp, o); o += 3; } }
     }
-    return f;
-  }
-
-  // body radius profile head -> tail
-  const PROFILE = [2.7, 3.5, 3.9, 3.6, 3.0, 2.3, 1.6, 1.1, 0.7];
-
-  function updateFish(f, dt) {
-    f.phase += dt * 0.07 * (f.speed / 0.3 + 0.5);
-    f.wander += dt * 0.01;
-    let desired = f.ang + Math.sin(f.wander * 1.3) * 0.02;
-    let boost = 1;
-
-    // avoid the cursor ring
-    if (mouse.active) {
-      const dx = f.x - mouse.x, dy = f.y - mouse.y, dist = Math.hypot(dx, dy);
-      if (dist < 34) {
-        const away = Math.atan2(dy, dx);
-        desired = f.ang + angDiff(f.ang, away) * 0.12;
-        boost = 1 + (34 - dist) / 34 * 1.6;
-      }
-    }
-    // chase nearest food
-    let target = null, best = 1e9;
-    for (const p of food) {
-      const dd = Math.hypot(p.x - f.x, p.y - f.y);
-      if (dd < best && dd < 140) { best = dd; target = p; }
-    }
-    if (target) {
-      const to = Math.atan2(target.y - f.y, target.x - f.x);
-      desired = f.ang + angDiff(f.ang, to) * 0.09;
-      boost = Math.max(boost, 1.5);
-      if (best < 3.5) { target.eaten = true; ripples.push({ x: target.x, y: target.y, r: 1, max: 12, life: 1 }); }
-    }
-    // soft edge steering
-    const m = 22;
-    if (f.x < m || f.x > W - m || f.y < m || f.y > H - m) {
-      const toC = Math.atan2(H / 2 - f.y, W / 2 - f.x);
-      desired = f.ang + angDiff(f.ang, toC) * 0.06;
-    }
-    f.ang += Math.max(-0.045, Math.min(0.045, angDiff(f.ang, desired))) * dt;
-    const v = f.speed * boost * dt * (0.8 + 0.25 * Math.sin(f.phase * 2));
-    f.x += Math.cos(f.ang) * v;
-    f.y += Math.sin(f.ang) * v;
-    // wrap if it escaped far
-    if (f.x < -30) f.x = W + 20; if (f.x > W + 30) f.x = -20;
-    if (f.y < -30) f.y = H + 20; if (f.y > H + 30) f.y = -20;
-
-    // chain follow with swim wave
-    let prev = { x: f.x, y: f.y };
-    f.segs[0].x = f.x; f.segs[0].y = f.y;
-    const gap = 2.1 * f.size;
-    for (let s = 1; s < SEG; s++) {
-      const sg = f.segs[s];
-      let dx = sg.x - prev.x, dy = sg.y - prev.y;
-      const L = Math.hypot(dx, dy) || 1;
-      sg.x = prev.x + dx / L * gap;
-      sg.y = prev.y + dy / L * gap;
-      // lateral wiggle growing toward tail
-      const wob = Math.sin(f.phase - s * 0.7) * 0.12 * s * boost;
-      sg.x += -Math.sin(f.ang) * wob * 0.2;
-      sg.y += Math.cos(f.ang) * wob * 0.2;
-      prev = sg;
+    this.fGeo.attributes.position.needsUpdate = true; this.sfGeo.attributes.position.needsUpdate = true;
+    this.fGeo.computeVertexNormals();
+    // eyes
+    for (let e = 0; e < 2; e++) { const side = e ? 1 : -1;
+      this.ringPt(.085, Math.PI + side * Math.PI * .34, 1.0, A, bias, tmp, 0);
+      const wx = this.px + tmp[0] * cs + tmp[2] * sn, wz = this.pz - tmp[0] * sn + tmp[2] * cs;
+      this.eyes[e].position.set(wx, this.py + tmp[1], wz); }
+    // swimsuit
+    if (this.suitOn) for (const { g, t0, t1, R } of this.suit.geos) {
+      const p = g.attributes.position.array;
+      for (let i = 0; i <= R; i++) { const t = lerp(t0, t1, i / R); const flare = 1.08 + .05 * Math.sin(i / R * Math.PI);
+        for (let j = 0; j <= MS; j++) { this.ringPt(t, j / MS * Math.PI * 2, flare, A, bias, tmp, 0);
+          const k = (i * (MS + 1) + j) * 3; const wx = this.px + tmp[0] * cs + tmp[2] * sn, wz = this.pz - tmp[0] * sn + tmp[2] * cs;
+          p[k] = wx; p[k + 1] = this.py + tmp[1]; p[k + 2] = wz; } }
+      g.attributes.position.needsUpdate = true; g.computeVertexNormals();
     }
   }
+}
 
-  function drawFish(f) {
-    const sz = f.size;
-    const shadow = (dx, dy, col, alpha) => {};
-    // shadow on the water floor
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = '#04485a';
-    for (let s = 0; s < SEG; s++) {
-      ctx.beginPath(); ctx.arc(f.segs[s].x + 3, f.segs[s].y + 4, PROFILE[s] * sz, 0, TAU); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // pectoral fins
-    const head = f.segs[1], neck = f.segs[2];
-    const fa = Math.atan2(neck.y - f.segs[3].y, neck.x - f.segs[3].x);
-    const flap = Math.sin(f.phase * 1.6) * 0.35;
-    ctx.fillStyle = f.pal.base === '#232329' ? '#d9a62a' : 'rgba(255,255,255,.85)';
-    for (const side of [-1, 1]) {
-      const a = fa + side * (1.2 + flap * side);
-      ctx.beginPath();
-      ctx.ellipse(neck.x + Math.cos(a) * 3.3 * sz, neck.y + Math.sin(a) * 3.3 * sz, 2.8 * sz, 1.1 * sz, a, 0, TAU);
-      ctx.fill();
-    }
-    // tail fin (fan of 3 lobes)
-    const tail = f.segs[SEG - 1], pre = f.segs[SEG - 3];
-    const ta = Math.atan2(tail.y - pre.y, tail.x - pre.x);
-    const sway = Math.sin(f.phase - SEG * 0.7) * 0.35;
-    ctx.fillStyle = 'rgba(255,255,255,.8)';
-    for (const k of [-0.55, 0, 0.55]) {
-      const a = ta + k + sway;
-      ctx.beginPath();
-      ctx.ellipse(tail.x + Math.cos(a) * 3.2 * sz, tail.y + Math.sin(a) * 3.2 * sz, 2.8 * sz, 1.2 * sz, a, 0, TAU);
-      ctx.fill();
-    }
-    // body: back to front so head overlaps
-    for (let s = SEG - 1; s >= 0; s--) {
-      const sg = f.segs[s];
-      ctx.fillStyle = f.colors[s];
-      ctx.beginPath(); ctx.arc(sg.x, sg.y, PROFILE[s] * sz, 0, TAU); ctx.fill();
-    }
-    // dark outline-ish highlight: tiny eyes
-    const ha = Math.atan2(f.segs[0].y - f.segs[2].y, f.segs[0].x - f.segs[2].x);
-    ctx.fillStyle = '#111';
-    for (const side of [-1, 1]) {
-      const a = ha + side * 1.05;
-      ctx.fillRect(Math.round(f.segs[0].x + Math.cos(a) * 2.1 * sz), Math.round(f.segs[0].y + Math.sin(a) * 2.1 * sz), 1, 1);
-    }
-  }
-
-  // ---------- lily pads ----------
-  let pads = [];
-  function makePads() {
-    pads = [];
-    const n = Math.max(5, Math.round(W * H / 9000));
-    for (let i = 0; i < n; i++) {
-      pads.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(6, 11), rot: rnd(0, TAU), bob: rnd(0, TAU), flower: Math.random() < 0.55 });
-    }
-  }
-  function drawPad(p) {
-    const x = p.x + Math.sin(t * 0.3 + p.bob) * 0.8, y = p.y + Math.cos(t * 0.27 + p.bob) * 0.8;
-    ctx.globalAlpha = 0.18; ctx.fillStyle = '#04485a';
-    ctx.beginPath(); ctx.arc(x + 3, y + 4, p.r, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#3d9a3c';
-    ctx.beginPath(); ctx.moveTo(x, y);
-    ctx.arc(x, y, p.r, p.rot + 0.35, p.rot + TAU - 0.35); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#58b94c';
-    ctx.beginPath(); ctx.arc(x - p.r * 0.15, y - p.r * 0.15, p.r * 0.7, 0, TAU); ctx.fill();
-    if (p.flower) {
-      ctx.fillStyle = '#f7a8c4';
-      ctx.beginPath(); ctx.arc(x, y, p.r * 0.38, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#ffd6e4';
-      ctx.beginPath(); ctx.arc(x, y, p.r * 0.2, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#f2c230';
-      ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
-    }
-  }
-
-  // ---------- ripples, food, cursor ----------
-  function drawRipples(dt) {
-    ctx.lineWidth = 1;
-    for (let i = ripples.length - 1; i >= 0; i--) {
-      const r = ripples[i];
-      r.r += 0.35 * dt; r.life = 1 - r.r / r.max;
-      if (r.life <= 0) { ripples.splice(i, 1); continue; }
-      ctx.strokeStyle = `rgba(255,255,255,${(r.life * 0.7).toFixed(2)})`;
-      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
-    }
-  }
-  function drawFood(dt) {
-    for (let i = food.length - 1; i >= 0; i--) {
-      const p = food[i];
-      p.age += dt;
-      if (p.eaten || p.age > 1500) { food.splice(i, 1); continue; }
-      ctx.fillStyle = '#c98a3a';
-      ctx.fillRect(Math.round(p.x + Math.sin(t + p.s) * 0.5), Math.round(p.y), 2, 2);
-    }
-  }
-  let lastRingT = 0;
-  function drawCursor() {
-    if (!mouse.active) return;
-    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 26 + Math.sin(t * 2) * 1.2, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,.25)';
-    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 33 + Math.sin(t * 2 + 1) * 1.5, 0, TAU); ctx.stroke();
-  }
-
-  function initWorld() {
-    fishes.length = 0;
-    const n = Math.max(7, Math.min(18, Math.round(W * H / 7500)));
-    for (let i = 0; i < n; i++) fishes.push(makeFish());
-    makePads();
-  }
-
-  // ---------- loop ----------
-  let last = performance.now();
-  function frame(now) {
-    requestAnimationFrame(frame);
-    let dt = Math.min(3, (now - last) / 16.667); last = now;
-    if (paused) return;
-    t += dt * 0.016;
-    drawWater();
-    for (const f of fishes) updateFish(f, dt);
-    for (const f of fishes) drawFish(f);
-    drawFood(dt);
-    for (const p of pads) drawPad(p);
-    drawRipples(dt);
-    drawCursor();
-  }
-
-  // ---------- input ----------
-  function setMouse(e) {
-    mouse.x = e.clientX / PIX; mouse.y = e.clientY / PIX; mouse.active = true;
-  }
-  addEventListener('pointermove', e => {
-    setMouse(e);
-    const n = performance.now();
-    if (n - lastRingT > 140) { ripples.push({ x: mouse.x, y: mouse.y, r: 4, max: 16, life: 1 }); lastRingT = n; }
+/* ---------- lily pads and lotus ---------- */
+function padTexture(hueShift) {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d');
+  const g = x.createRadialGradient(256, 256, 20, 256, 256, 256);
+  g.addColorStop(0, `hsl(${100 + hueShift},50%,36%)`); g.addColorStop(.7, `hsl(${108 + hueShift},55%,27%)`); g.addColorStop(1, `hsl(${115 + hueShift},55%,18%)`);
+  x.fillStyle = g; x.fillRect(0, 0, 512, 512);
+  x.strokeStyle = 'rgba(190,240,150,0.25)'; x.lineWidth = 2;
+  for (let k = 0; k < 18; k++) { const a = k / 18 * 6.283 + .1; x.beginPath(); x.moveTo(256, 256);
+    x.quadraticCurveTo(256 + Math.cos(a + .15) * 120, 256 + Math.sin(a + .15) * 120, 256 + Math.cos(a) * 250, 256 + Math.sin(a) * 250); x.stroke(); }
+  for (let k = 0; k < 400; k++) { x.fillStyle = `rgba(255,255,255,${rnd(0, .05)})`; x.beginPath(); x.arc(rnd(0, 512), rnd(0, 512), rnd(1, 4), 0, 7); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function padGeometry(rad) {
+  const R = 8, S = 56, nw = .4, pos = [], uv = [], idx = [];
+  for (let i = 0; i <= R; i++) { const rn = i / R;
+    for (let k = 0; k <= S; k++) { const th = nw / 2 + (Math.PI * 2 - nw) * k / S;
+      pos.push(Math.cos(th) * rn * rad, .14 * Math.pow(rn, 4) + .03 * Math.sin(th * 7) * rn * rn, Math.sin(th) * rn * rad);
+      uv.push(Math.cos(th) * rn * .5 + .5, Math.sin(th) * rn * .5 + .5); } }
+  for (let i = 0; i < R; i++) for (let k = 0; k < S; k++) { const a = i * (S + 1) + k, b = a + 1, c = a + S + 1, d = c + 1; idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+function petalGeo(len, wid, cup, lift) {
+  const U = 8, V = 6, pos = [], col = [], idx = [];
+  const c0 = new THREE.Color(0xfff2f5), c1 = new THREE.Color(0xf0629a), c = new THREE.Color();
+  for (let i = 0; i <= U; i++) { const u = i / U; const w = wid * Math.sin(Math.PI * Math.pow(u, .75)) * (1 - .25 * u);
+    for (let j = 0; j <= V; j++) { const v = -1 + 2 * j / V;
+      pos.push(u * len, lift * len * u * u + cup * w * v * v, v * w);
+      c.copy(c0).lerp(c1, smooth(.1, .95, u)); col.push(c.r, c.g, c.b); } }
+  for (let i = 0; i < U; i++) for (let j = 0; j < V; j++) { const a = i * (V + 1) + j, b = a + 1, cc = a + V + 1, d = cc + 1; idx.push(a, b, cc, b, d, cc); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+function makeLotus() {
+  const gr = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, side: THREE.DoubleSide, envMap: envTex, envMapIntensity: .3 });
+  const layers = [[7, .62, .30, .16, .12], [8, .55, .28, .45, .22], [8, .46, .24, .8, .3], [6, .34, .18, 1.1, .3]];
+  layers.forEach(([n, len, wid, tilt, lift], li) => {
+    const geo = petalGeo(len, wid, .35, lift);
+    for (let k = 0; k < n; k++) { const m = new THREE.Mesh(geo, mat); m.rotation.order = 'YZX'; m.rotation.y = k / n * 6.283 + li * .4; m.rotation.z = tilt; m.position.y = .02 + li * .04; gr.add(m); }
   });
-  addEventListener('pointerdown', e => {
-    setMouse(e);
-    for (let i = 0; i < 5; i++) food.push({ x: mouse.x + rnd(-5, 5), y: mouse.y + rnd(-5, 5), age: 0, s: rnd(0, 6) });
-    ripples.push({ x: mouse.x, y: mouse.y, r: 2, max: 22, life: 1 });
-  });
-  addEventListener('pointerleave', () => { mouse.active = false; });
-  addEventListener('keydown', e => {
-    if (e.key === 'f' || e.key === 'F') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
-    if (e.key === ' ') { paused = !paused; e.preventDefault(); }
-  });
-  addEventListener('resize', resize);
-  setTimeout(() => { document.getElementById('hint').style.opacity = 0; }, 6000);
+  const ctr = new THREE.Mesh(new THREE.SphereGeometry(.1, 12, 10), new THREE.MeshStandardMaterial({ color: 0xf6c842, roughness: .6 })); ctr.position.y = .14; ctr.scale.y = .6; gr.add(ctr);
+  const st = new THREE.MeshStandardMaterial({ color: 0xffd34d, roughness: .6 });
+  for (let k = 0; k < 14; k++) { const a = k / 14 * 6.283; const s = new THREE.Mesh(new THREE.ConeGeometry(.012, .16, 5), st); s.position.set(Math.cos(a) * .13, .16, Math.sin(a) * .13); s.rotation.z = -Math.cos(a) * .4; s.rotation.x = Math.sin(a) * .4; gr.add(s); }
+  return gr;
+}
 
-  resize();
-  requestAnimationFrame(frame);
-})();
+/* ---------- world ---------- */
+const PADY = 1.65;
+const pads = [], fish = [], foods = [];
+const foodGeo = new THREE.IcosahedronGeometry(.09, 1);
+const foodMat = new THREE.MeshStandardMaterial({ color: 0xb5712f, roughness: .6 });
+const KOI = ['kohaku', 'sanke', 'ogon', 'showa', 'tancho', 'orange', 'shusui', 'kohaku', 'sanke', 'ogon', 'orange', 'showa'];
+let bounds = extent(.45);
+
+function placePads() {
+  const e = extent(PADY);
+  const want = 7;
+  for (let n = 0, tries = 0; n < want && tries < 400; tries++) {
+    const rad = rnd(.9, 1.5);
+    const x = rnd(-e.hw * .95, e.hw * .95), z = rnd(-e.hh * .95, e.hh * .95);
+    if (pads.some(p => Math.hypot(p.bx - x, p.bz - z) < p.rad + rad + .8)) continue;
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(padGeometry(rad), new THREE.MeshStandardMaterial({ map: padTexture(rnd(-10, 12)), roughness: .5, side: THREE.DoubleSide, envMap: envTex, envMapIntensity: .35 }));
+    g.add(m);
+    if (n === 1 || n === 4) { const f = makeLotus(); f.scale.setScalar(rad * .85); f.position.set(-rad * .1, .05, rad * .05); g.add(f); }
+    g.position.set(x, PADY, z); g.rotation.y = rnd(0, 6.28);
+    topScene.add(g);
+    pads.push({ g, bx: x, bz: z, rad, ph: rnd(0, 6.28), spin: rnd(-.03, .03) }); n++;
+  }
+}
+function placeFish() {
+  const n = camera.aspect < 1 ? 7 : 10;
+  for (let i = 0; i < n; i++) {
+    const f = new Fish(KOI[i % KOI.length], rnd(2.6, 3.8), SUITS[i % SUITS.length]);
+    f.id = i; f.px = rnd(-bounds.hw, bounds.hw); f.pz = rnd(-bounds.hh, bounds.hh); f.py = .35 + .08 * i % .5;
+    fish.push(f);
+  }
+}
+
+/* ---------- input ---------- */
+const mouse = { x: 0, z: 0, active: false, lastRip: 0, lx: -1, ly: -1 };
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function toWorld(cx, cy, y) {
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const o = ray.ray.origin, d = ray.ray.direction, t = (y - o.y) / d.y; return { x: o.x + d.x * t, z: o.z + d.z * t };
+}
+function setMouse(e) {
+  const w = toWorld(e.clientX, e.clientY, .8); mouse.x = w.x; mouse.z = w.z; mouse.active = true;
+  waterMat.uniforms.uM.value.set(e.clientX / innerWidth * camera.aspect, 1 - e.clientY / innerHeight, 1);
+  if (simT - mouse.lastRip > .16 && Math.hypot(e.clientX - mouse.lx, e.clientY - mouse.ly) > 24) { const ww = toWorld(e.clientX, e.clientY, 1.6); ripple(ww.x, ww.z, .35); mouse.lastRip = simT; mouse.lx = e.clientX; mouse.ly = e.clientY; }
+}
+canvas.addEventListener('pointermove', setMouse);
+canvas.addEventListener('pointerdown', e => {
+  setMouse(e);
+  const w = toWorld(e.clientX, e.clientY, 1.6); ripple(w.x, w.z, 1);
+  for (let k = 0; k < 4; k++) { const m = new THREE.Mesh(foodGeo, foodMat); const fx = w.x + rnd(-.35, .35), fz = w.z + rnd(-.35, .35); m.position.set(fx, 1.72, fz); topScene.add(m); foods.push({ m, x: fx, z: fz, age: 0 }); }
+});
+canvas.addEventListener('pointerleave', () => { mouse.active = false; waterMat.uniforms.uM.value.z = 0; });
+canvas.addEventListener('pointerup', e => { if (e.pointerType === 'touch') { mouse.active = false; waterMat.uniforms.uM.value.z = 0; } });
+let paused = false;
+const msgEl = document.getElementById('msg');
+function say(t, ms = 3500) { msgEl.textContent = t; msgEl.style.opacity = 1; clearTimeout(say.t); say.t = setTimeout(() => msgEl.style.opacity = 0, ms); }
+function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+const bSuit = document.getElementById('bSuit');
+function toggleSuits(force) { const on = force !== undefined ? force : !fish[0].suitOn; fish.forEach(f => f.setSuit(on)); bSuit.classList.toggle('on', on); }
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'f') toggleFull(); else if (k === ' ') { paused = !paused; e.preventDefault(); }
+  else if (k === 's') toggleSuits(); else if (k === 'm') menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+  else if (k === 'h') document.body.classList.toggle('noui');
+});
+document.getElementById('bFull').onclick = toggleFull;
+bSuit.onclick = () => toggleSuits();
+const menu = document.getElementById('menu'), bMusic = document.getElementById('bMusic');
+bMusic.onclick = () => { if (audio.on) stopAudio(); else menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex'; };
+
+/* ---------- audio (music mode) ---------- */
+const audio = { on: false, demo: false, ctx: null, an: null, data: null, stream: null, bass: 0, mid: 0, hi: 0, level: 0, avg: .1, peak: .2, lastBeat: -9, beats: 0, beatPulse: 0, bpmT: 0 };
+function stopAudio() {
+  if (audio.stream) audio.stream.getTracks().forEach(t => t.stop());
+  if (audio.ctx) audio.ctx.close().catch(() => {});
+  Object.assign(audio, { on: false, demo: false, ctx: null, an: null, stream: null, bass: 0, mid: 0, hi: 0, level: 0 });
+  bMusic.classList.remove('on'); bMusic.textContent = '🎵 Music mode'; say('Music mode off');
+}
+async function startAudio(kind) {
+  menu.style.display = 'none';
+  if (audio.on) stopAudio();
+  if (kind === 'demo') { audio.on = audio.demo = true; audio.bpmT = simT; bMusic.classList.add('on'); bMusic.textContent = '🎵 Music on (tap to stop)'; say('Demo beat running'); return; }
+  try {
+    let stream;
+    const aopt = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    if (kind === 'tab') {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: aopt });
+      if (!stream.getAudioTracks().length) { stream.getTracks().forEach(t => t.stop()); say('No audio shared. Tick "Share tab audio" in the picker.', 6000); return; }
+    } else stream = await navigator.mediaDevices.getUserMedia({ audio: aopt });
+    const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC();
+    const src = ctx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+    const an = ctx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = .55; src.connect(an);
+    Object.assign(audio, { on: true, demo: false, ctx, an, data: new Uint8Array(an.frequencyBinCount), stream });
+    stream.getTracks().forEach(t => t.addEventListener('ended', () => { if (audio.stream === stream) stopAudio(); }));
+    bMusic.classList.add('on'); bMusic.textContent = '🎵 Music on (tap to stop)'; say('Listening. Play some music!');
+  } catch (err) { say('Could not start audio: ' + (err && err.name || 'blocked'), 5000); }
+}
+document.getElementById('mTab').onclick = () => startAudio('tab');
+document.getElementById('mMic').onclick = () => startAudio('mic');
+document.getElementById('mDemo').onclick = () => startAudio('demo');
+
+let routine = 0, routineT = 0, routineStart = 0;
+const ROUTINES = ['orbit', 'figure8', 'bloom', 'conga'];
+function updateAudio(dt) {
+  audio.beatPulse *= Math.exp(-dt * 4);
+  if (!audio.on) { audio.bass *= .9; audio.level *= .9; return; }
+  let bass, mid, hi;
+  if (audio.demo) {
+    const ph = ((simT - audio.bpmT) * 2) % 1; // 120 bpm
+    bass = Math.exp(-ph * 5) * .8 + .1; mid = .3 + .2 * Math.sin(simT * 3); hi = .25 + .15 * Math.sin(simT * 7);
+  } else {
+    audio.an.getByteFrequencyData(audio.data);
+    const d = audio.data, avg = (a, b) => { let s = 0; for (let i = a; i < b; i++) s += d[i]; return s / (b - a) / 255; };
+    bass = avg(1, 5); mid = avg(5, 32); hi = avg(32, 120);
+    audio.peak = Math.max(audio.peak * .998, bass, .15); bass = bass / audio.peak;
+    mid = Math.min(1, mid * 2.2); hi = Math.min(1, hi * 4);
+  }
+  audio.bass = lerp(audio.bass, bass, .5); audio.mid = lerp(audio.mid, mid, .3); audio.hi = lerp(audio.hi, hi, .3);
+  audio.level = clamp((audio.bass + audio.mid) * .6, 0, 1);
+  audio.avg = audio.avg * .96 + bass * .04;
+  if (bass > audio.avg * 1.25 && bass > .35 && simT - audio.lastBeat > .27) onBeat(bass);
+  if (simT - routineStart > 11 && audio.level > .05) { routine = (routine + 1) % ROUTINES.length; routineStart = simT; say('Routine: ' + ROUTINES[routine], 2200); }
+}
+function onBeat(str) {
+  audio.lastBeat = simT; audio.beats++; audio.beatPulse = 1;
+  fish.forEach((f, i) => { f.kick = 1; if ((i + audio.beats) % 3 === 0) ripple(f.px + Math.cos(f.psi) * f.L * .5, f.pz - Math.sin(f.psi) * f.L * .5, .6 + str * .4); });
+  if (audio.beats % 4 === 0) { const e = extent(1.6); ripple(rnd(-e.hw, e.hw) * .8, rnd(-e.hh, e.hh) * .8, 1); }
+}
+function danceTarget(f, i, n, t) {
+  const e = bounds, B = audio.bass;
+  const rx = e.hw * .62, rz = e.hh * .68;
+  let a, x, z, lead = .45;
+  switch (ROUTINES[routine]) {
+    case 'orbit': a = i / n * 6.283 + t * .5; x = Math.cos(a + lead) * rx * (.85 + .15 * B); z = Math.sin(a + lead) * rz * (.85 + .15 * B); break;
+    case 'figure8': a = t * .42 + i * .55 + lead; x = Math.sin(a) * e.hw * .7; z = Math.sin(2 * a) * e.hh * .55; break;
+    case 'bloom': a = i / n * 6.283 + t * .25 + lead; { const r = .25 + .6 * (.5 + .5 * Math.sin(t * .7)); x = Math.cos(a) * rx * r * 1.15; z = Math.sin(a) * rz * r * 1.15; } break;
+    default: a = t * .33 - i * .16 + lead; x = Math.sin(a * 1.3) * e.hw * .8; z = Math.sin(a * 2.6 + .5) * e.hh * .55;
+  }
+  return [x, z];
+}
+
+/* ---------- simulation ---------- */
+let nextDrop = 3;
+function stepFish(f, dt, i, n) {
+  const t = simT;
+  const fx = Math.cos(f.psi), fz = -Math.sin(f.psi);
+  let vx = fx * .6, vz = fz * .6, tspeed = f.base, calm = 1;
+  // edges
+  const mx = bounds.hw - 1.2, mz = bounds.hh - 1.0;
+  const ex = Math.max(0, Math.abs(f.px) - mx), ez = Math.max(0, Math.abs(f.pz) - mz);
+  if (ex > 0) vx += -Math.sign(f.px) * Math.min(ex, 1.5) * 1.6; if (ez > 0) vz += -Math.sign(f.pz) * Math.min(ez, 1.5) * 1.6;
+  // separation
+  for (const o of fish) if (o !== f) { const dx = f.px - o.px, dz = f.pz - o.pz, d = Math.hypot(dx, dz), lim = (f.L + o.L) * .3; if (d < lim && d > 1e-3) { vx += dx / d * (lim - d) * 1.4; vz += dz / d * (lim - d) * 1.4; } }
+  const dancing = audio.on && audio.level > .04;
+  let danceSpd = 0;
+  if (dancing) {
+    const [tx, tz] = danceTarget(f, i, n, t); const dx = tx - f.px, dz = tz - f.pz, d = Math.hypot(dx, dz) || 1;
+    vx += dx / d * 3; vz += dz / d * 3; tspeed = clamp(d * 1.1, 1.4, 4.2) * (1 + audio.bass * .5); calm = .15;
+  } else {
+    if (mouse.active) { const hx = f.px + fx * f.L * .4, hz = f.pz + fz * f.L * .4, dx = hx - mouse.x, dz = hz - mouse.z, d = Math.hypot(dx, dz);
+      if (d < 3.4 && d > 1e-3) { const k = (3.4 - d) / 3.4; vx += dx / d * k * 6; vz += dz / d * k * 6; tspeed = f.base * (1 + k * 2.2); calm = .2; } }
+    let best = null, bd = 1e9;
+    for (const fo of foods) { const d = Math.hypot(fo.x - f.px, fo.z - f.pz); if (d < bd) { bd = d; best = fo; } }
+    if (best && bd < 14) { const dx = best.x - f.px, dz = best.z - f.pz; vx += dx / bd * 2.4; vz += dz / bd * 2.4; tspeed = f.base * 1.5; calm = .25;
+      const mxp = f.px + fx * f.L * .5, mzp = f.pz + fz * f.L * .5;
+      if (Math.hypot(best.x - mxp, best.z - mzp) < .45) { best.eaten = true; ripple(best.x, best.z, .8); f.kick = .8; } }
+  }
+  const want = Math.atan2(-vz, vx);
+  let tv = clamp(angDiff(want, f.psi) * (dancing ? 3.2 : 2.2), -3, 3);
+  tv += calm * (.5 * Math.sin(t * .37 + f.s1) + .35 * Math.sin(t * .91 + f.s2));
+  f.tvS += (tv - f.tvS) * Math.min(1, dt * 4);
+  f.psi += f.tvS * dt;
+  f.speed += (tspeed * (1 + f.kick * .8) - f.speed) * Math.min(1, dt * 2.2);
+  f.px += Math.cos(f.psi) * f.speed * dt; f.pz += -Math.sin(f.psi) * f.speed * dt;
+  f.kick *= Math.exp(-dt * 3.5);
+  f.py = .42 + .2 * Math.sin(t * .3 + f.s3) + (dancing ? .08 * audio.bass * Math.sin(t * 6 + i) : 0);
+}
+function sim(dt) {
+  simT += dt;
+  updateAudio(dt);
+  waterMat.uniforms.uT.value = simT; waterMat.uniforms.uGlow.value = audio.bass * .8;
+  for (let i = 0; i < fish.length; i++) stepFish(fish[i], dt, i, fish.length);
+  const energy = audio.on ? audio.level : 0;
+  fish.forEach(f => f.update(dt, energy));
+  for (let i = foods.length - 1; i >= 0; i--) { const fo = foods[i]; fo.age += dt; fo.m.position.y = 1.72 + .015 * Math.sin(simT * 2 + i);
+    if (fo.eaten || fo.age > 28) { topScene.remove(fo.m); foods.splice(i, 1); } }
+  const padU = floorMat.uniforms.uPads.value;
+  pads.forEach((p, i) => {
+    p.g.position.x = p.bx + Math.sin(simT * .1 + p.ph) * .35; p.g.position.z = p.bz + Math.cos(simT * .08 + p.ph) * .3;
+    p.g.rotation.y += p.spin * dt; const sc = 1 + audio.bass * .07; p.g.scale.setScalar(sc);
+    p.g.position.y = PADY + .02 * Math.sin(simT * .9 + p.ph) + audio.bass * .05;
+    if (i < MAXPADS) padU[i].set(p.g.position.x, p.g.position.z, p.rad * 1.05);
+  });
+  if (simT > nextDrop) { nextDrop = simT + rnd(2.5, 6); const e = extent(1.6); ripple(rnd(-e.hw, e.hw) * .9, rnd(-e.hh, e.hh) * .9, rnd(.4, .8)); }
+}
+
+/* ---------- loop ---------- */
+function resize() {
+  const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (rt) rt.dispose();
+  rt = new THREE.WebGLRenderTarget(Math.floor(w * pr), Math.floor(h * pr), { samples: 4, type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  waterMat.uniforms.tRT.value = rt.texture; waterMat.uniforms.uAsp.value = camera.aspect;
+  bounds = extent(.45);
+}
+addEventListener('resize', resize);
+resize(); placePads(); placeFish();
+if (Q.get('suits') === '1') toggleSuits(true);
+if (Q.get('music') === '1') startAudio('demo');
+for (let t = 0; t < FF; t += 1 / 30) sim(1 / 30);
+
+function render() {
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(underScene, camera);
+  renderer.setRenderTarget(null); renderer.autoClear = true; renderer.render(waterScene, ortho);
+  renderer.autoClear = false; renderer.clearDepth(); renderer.render(topScene, camera); renderer.autoClear = true;
+}
+let last = 0;
+function frame(now) {
+  if (!last) last = now;
+  const dt = clamp((now - last) / 1000, 0, .05); last = now;
+  if (!paused) sim(dt);
+  render(); requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setTimeout(() => say('Move to ripple the water. Click to feed. M = music, S = swimsuits, F = fullscreen.', 6000), 800);
+window.__koi = { ready: true, fish, audio };
+if (Q.get('dbg')) setTimeout(()=>{document.title=JSON.stringify(fish.map(f=>[+f.px.toFixed(1),+f.pz.toFixed(1),+f.speed.toFixed(1)]))+' b'+audio.bass.toFixed(2)+' r'+routine+' hw'+bounds.hw.toFixed(1)},1500);
 </script>
 </body>
 </html>
