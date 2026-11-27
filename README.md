@@ -2,6 +2,8 @@
 
 An interactive pixel-art koi pond that runs in any browser. Open `index.html`, press `F` for fullscreen, and use it as a live wallpaper or a calm background on a second screen.
 
+Live: https://ahmedbadawix77x-gif.github.io/koi-pond/
+
 Inspired by a "koi pond wallpaper" reel by @karimeltalawii (Claude series, part 3).
 
 ## What it does
@@ -33,7 +35,6 @@ No install and no dependencies. Download the repo and open `index.html`, or host
 ## Files
 
 - `index.html`: the whole app (HTML, CSS and JavaScript, canvas based).
-- `preview.png`: screenshot.
 
 ## Tweaks
 
