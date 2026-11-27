@@ -40,7 +40,7 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 900);
 const N = 128, CX = N / 2, CZ = N / 2;
 camera.position.set(CX + 58, 38, CZ + 70);
 const controls = { target: new THREE.Vector3(61, 6, 60), autoRotate: false, update() {}, addEventListener() {} };
-const CAMP = new THREE.Vector3(61, 9.5, 126.5), CAMT = new THREE.Vector3(61, 12.5, 30); camera.fov = 52; camera.position.copy(CAMP);
+const CAMP = new THREE.Vector3(61, 8, 124.5), CAMT = new THREE.Vector3(61, 15.5, 30); camera.fov = 52; camera.position.copy(CAMP);
 let idleT = 0;
 
 /* ================= textures (original pixel art, drawn in code) ================= */
@@ -58,7 +58,7 @@ fillT(3, ['#f0e0a8', '#e8d595', '#f5e8b8', '#e2cd8c']);
 fillT(4, ['#8d8d8d', '#7e7e7e', '#9a9a9a', '#707070']);
 fillT(5, 0, (x, y) => (x % 4 === 0 ? '#4e3319' : pick(['#6b4a2b', '#5e3f23', '#755232'])));
 fillT(6, 0, (x, y) => { const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5)); return d > 6 ? '#5e3f23' : (Math.floor(d) % 2 ? '#c9a56a' : '#bd9a5e'); });
-fillT(7, ['#2f7d2a', '#3c9234', '#276a24', '#46a63c']); hole(7, .14);
+fillT(7, ['#3a9a2c', '#4cb236', '#2a7a22', '#62c844', '#8ad650']); hole(7, .12);
 fillT(8, 0, (x, y) => (y % 4 === 3 ? '#8c6531' : pick(['#b88c4f', '#a87d43', '#c29a5e'])));
 fillT(9, 0, (x, y) => (y % 4 === 3 ? '#b85f7e' : pick(['#e58aa8', '#d97b9b', '#ee9bb5'])));
 fillT(10, 0, (x, y) => (((x + y) % 5 === 0) ? '#a98a2e' : pick(['#d8b85a', '#c9a948', '#e4c76c'])));
@@ -72,8 +72,12 @@ fillT(18, ['#c2331f', '#d94a2a', '#a82a1a', '#e5603a']); hole(18, .12);
 fillT(19, ['#e8c32a', '#f2d44a', '#d9b21e', '#f7e070']); hole(19, .12);
 fillT(20, ['#b9a83a', '#c9b845', '#a99a30', '#d6c552']);
 fillT(21, 0, (x, y) => { const g = y < 3 + (x * 7 % 3); return g ? pick(['#b9a83a', '#c9b845', '#a99a30']) : pick(['#8a5a36', '#7a4d2c', '#966340', '#6e4527']); });
-fillT(14, ['#ffffff', '#f2f8ff', '#e4effb', '#f8fcff']);
-fillT(16, 0, (x, y) => (y % 5 === 0 ? '#5a5a62' : pick(['#7b7b84', '#6c6c75', '#85858e', '#62626b'])));
+fillT(22, ['#d9822a', '#e69a35', '#c96f1e', '#eaa84a']);
+fillT(23, ['#b8442a', '#c9552f', '#a03a22', '#d4683a']);
+fillT(24, 0, (x, y) => { const g = y < 3 + (x * 7 % 3); return g ? pick(['#d9822a', '#e69a35', '#c96f1e']) : pick(['#8a5a36', '#7a4d2c', '#966340']); });
+fillT(25, 0, (x, y) => { const g = y < 3 + (x * 7 % 3); return g ? pick(['#b8442a', '#c9552f', '#a03a22']) : pick(['#8a5a36', '#7a4d2c', '#966340']); });
+fillT(14, ['#ffffff', '#fbfdff', '#f2f7ff', '#ffffff', '#fff8ee']);
+fillT(16, 0, (x, y) => (y % 5 === 0 ? '#4e453e' : pick(['#7a6c60', '#6b5e53', '#857769', '#5c5047'])));
 const atlas = new THREE.CanvasTexture(atl);
 atlas.magFilter = THREE.NearestFilter; atlas.minFilter = THREE.NearestFilter; atlas.generateMipmaps = false; atlas.colorSpace = THREE.SRGBColorSpace;
 
@@ -91,8 +95,8 @@ const gi = (x, y, z) => ((y - Y0) * N + z) * N + x;
 const inb = (x, y, z) => x >= 0 && x < N && z >= 0 && z < N && y >= Y0 && y < Y0 + YH;
 const getV = (x, y, z) => inb(x, y, z) ? G[gi(x, y, z)] : 0;
 const setV = (x, y, z, t) => { if (inb(x, y, z)) G[gi(x, y, z)] = t; };
-const T = { grass: 1, dirt: 2, sand: 3, stone: 4, log: 5, leaves: 6, planks: 7, pink: 8, thatch: 9, glass: 10, bougain: 11, plum: 12, wet: 13, snow: 14, rock: 15, leafO: 16, leafR: 17, leafY: 18, grassA: 19 };
-const TILES = { 1: [0, 1, 2], 2: [2, 2, 2], 3: [3, 3, 3], 4: [4, 4, 4], 5: [6, 5, 6], 6: [7, 7, 7], 7: [8, 8, 8], 8: [9, 9, 9], 9: [10, 10, 10], 10: [11, 11, 11], 11: [12, 12, 12], 12: [13, 13, 13], 13: [15, 15, 15], 14: [14, 14, 14], 15: [16, 16, 16], 16: [17, 17, 17], 17: [18, 18, 18], 18: [19, 19, 19], 19: [20, 21, 2] };
+const T = { grass: 1, dirt: 2, sand: 3, stone: 4, log: 5, leaves: 6, planks: 7, pink: 8, thatch: 9, glass: 10, bougain: 11, plum: 12, wet: 13, snow: 14, rock: 15, leafO: 16, leafR: 17, leafY: 18, grassA: 19, grassO: 20, grassR: 21 };
+const TILES = { 1: [0, 1, 2], 2: [2, 2, 2], 3: [3, 3, 3], 4: [4, 4, 4], 5: [6, 5, 6], 6: [7, 7, 7], 7: [8, 8, 8], 8: [9, 9, 9], 9: [10, 10, 10], 10: [11, 11, 11], 11: [12, 12, 12], 12: [13, 13, 13], 13: [15, 15, 15], 14: [14, 14, 14], 15: [16, 16, 16], 16: [17, 17, 17], 17: [18, 18, 18], 18: [19, 19, 19], 19: [20, 21, 2], 20: [22, 24, 2], 21: [23, 25, 2] };
 const SEE = { 6: 1, 10: 1, 11: 1, 12: 1, 16: 1, 17: 1, 18: 1 };
 
 const hv = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -100,27 +104,38 @@ function vnoise(x, z) { const xi = Math.floor(x), zi = Math.floor(z), xf = x - x
   return lerp(lerp(hv(xi, zi), hv(xi + 1, zi), u), lerp(hv(xi, zi + 1), hv(xi + 1, zi + 1), u), v); }
 const fbm = (x, z) => vnoise(x, z) * .55 + vnoise(x * 2.1, z * 2.1) * .3 + vnoise(x * 4.3, z * 4.3) * .15;
 const SURF = new Int16Array(N * N);
+const rdg = (x, z, k) => 1 - Math.abs(fbm(x * .05 * k + 2, z * .07 * k + 5) * 2 - 1);
 for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
-  const dx = (x - CX) / 27.2, dz = (z - CZ) / 25.6, r = Math.hypot(dx, dz);
-  const n = fbm(x * .07 + 3, z * .07 + 9);
-  let h = 10.5 * (1 - Math.pow(r, 1.9)) + n * 5 - 2.2;
-  const ex = x - (CX + 26), ez = z - (CZ - 20), er = Math.hypot(ex, ez);
-  h = Math.max(h, 4.2 - er * .75 + n * 1.6);
-  for (const [ix, iz, R, pk] of [[CX - 44, CZ - 32, 11, 6], [CX - 42, CZ + 34, 10, 5], [CX + 34, CZ + 40, 12, 6], [CX - 58, CZ + 2, 7, 4], [46, 110, 8, 9], [78, 111, 8, 9]]) {
-    const d = Math.hypot(x - ix, z - iz) / R; if (d < 1) h = Math.max(h, pk * (1 - Math.pow(d, 1.8)) + (n - .5) * 3.5 - 1.5);
-  }
-  { const d = Math.abs(z - 14) / 13, tp = smooth(2, 20, x) * smooth(2, 20, N - x) * (.2 + .8 * smooth(.35, .65, fbm(x * .045 + 9, 3.3))); if (d < 1 && tp > 0) { const m = 1 - d; const rg = 1 - Math.abs(fbm(x * .06 + 2, z * .1 + 5) * 2 - 1); h = Math.max(h, -5 + 44 * Math.pow(m, 1.2) * (.35 + .9 * rg) * tp + (fbm(x * .2, z * .2) - .5) * 3 * m); } }
-  SURF[z * N + x] = clamp(Math.floor(h), -7, 44);
+  const n = fbm(x * .07 + 3, z * .07 + 9), wob = (fbm(x * .06 + 40, 7) - .5) * 14;
+  let h = -6 - 1.5 * fbm(x * .1, z * .1);
+  const bank = smooth(103 + wob * .3, 110 + wob * .3, z);
+  h = lerp(h, 3.2 + n * 1.6, bank);
+  const side = Math.max(smooth(26 + wob, 8, x), smooth(102 - wob, 120, x)) * smooth(52, 74, z);
+  h = lerp(h, 3.4 + n * 2.2 + side * 3, side);
+  const farS = smooth(60 + wob * .4, 52 + wob * .4, z);
+  h = lerp(h, 2.6 + n * 1.4, farS);
+  const hill = smooth(47, 20, z);
+  h += hill * (12 * (.45 + .9 * rdg(x, z, 1.3)) + n * 3);
+  const mt = smooth(30, 8, z) * smooth(0, 10, x) * smooth(0, 10, N - x);
+  h += mt * (30 * Math.pow(rdg(x * .8, z * 1.2, 2.2), 1.8) * (.45 + .8 * fbm(x * .02 + 30, 5)) + fbm(x * .3, z * .3) * 6);
+  SURF[z * N + x] = clamp(Math.floor(h), -7, 46);
 }
 const gh = (x, z) => SURF[clamp(Math.floor(z), 0, N - 1) * N + clamp(Math.floor(x), 0, N - 1)];
 for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
   const s = SURF[z * N + x];
+  const pn = fbm(x * .09 + 7, z * .09 + 1);
   for (let y = Y0; y <= s; y++) {
-    let t;
-    if (y === s) t = s <= 0 ? (s === 0 ? T.wet : T.sand) : s <= 2 ? T.sand : s >= 16 ? T.snow : s >= 12 ? (fbm(x * .1 + 20, z * .1 + y * .08) > .56 ? T.rock : T.stone) : s >= 10 ? T.stone : (fbm(x * .06 + 11, z * .06 + 3) > .53 ? T.grassA : T.grass);
-    else if (s >= 17 && y >= s - 2 - (s >= 24 ? 9 : s >= 20 ? 5 : 0)) t = T.snow;
-    else if (s >= 10) t = (fbm(x * .1 + 5, z * .1 + y * .08) > .58 ? T.rock : T.stone);
-    else if (y >= s - 3) t = (s <= 2 ? T.sand : T.dirt);
+    let t; const ysn = 25 + (fbm(x * .16, z * .16 + y * .12) - .5) * 9;
+    if (s > 3 && y >= ysn) t = (fbm(x * .3 + 9, z * .3 + y * .3) > .72 ? T.rock : T.snow);
+    else if (s > 17 && y >= s - 2 && y > 15) t = (fbm(x * .12 + 20, z * .12 + y * .1) > .5 ? T.rock : T.stone);
+    else if (y === s) {
+      if (s <= 0) t = s === 0 ? T.wet : T.sand;
+      else if (z > 100) t = pn > .45 ? T.grassO : T.grassA;
+      else if (z < 50 && s >= 4) t = pn > .62 ? T.grassR : pn > .5 ? T.grassO : pn > .38 ? T.grassA : T.grass;
+      else t = pn > .7 ? T.grassA : T.grass;
+    }
+    else if (s > 17 && y > 14) t = (fbm(x * .1 + 5, z * .1 + y * .08) > .55 ? T.rock : T.stone);
+    else if (y >= s - 3) t = (s <= 1 ? T.sand : T.dirt);
     else t = T.stone;
     if (y === s && s <= -3) t = T.sand;
     G[gi(x, y, z)] = t;
@@ -128,7 +143,7 @@ for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
 }
 /* helpers for structures */
 const landCells = [];   // grass cells for trees
-for (let x = 3; x < N - 3; x++) for (let z = 3; z < N - 3; z++) { const s = SURF[z * N + x]; if (s >= 3 && s <= 9) landCells.push([x, z]); }
+for (let x = 3; x < N - 3; x++) for (let z = 3; z < N - 3; z++) { const s = SURF[z * N + x]; if (s >= 2 && s <= 20) landCells.push([x, z]); }
 function shoreFrom(dx, dz, x0, z0) { let x = x0, z = z0; for (let k = 0; k < N; k++) { if (gh(x, z) >= 1) return [x, z]; x += dx; z += dz; } return [CX, CZ]; }
 
 const perches = [];       // {x,y,z,yaw,cap,kind}
@@ -136,7 +151,7 @@ const bushes = [];        // positions of bougainvillea for butterflies/fireflie
 function tree(x, z, big) {
   const s = gh(x, z), h = big ? ri(5, 6) : ri(4, 5);
   for (let y = 1; y <= h; y++) setV(x, s + y, z, T.log);
-  const top = s + h; const onM = Math.hypot((x - CX) / 27.2, (z - CZ) / 25.6) < 1.15; const LT = rng() < (onM ? .22 : .6) ? pick([T.leafO, T.leafO, T.leafR, T.leafY]) : T.leaves;
+  const top = s + h; const LT = rng() < (z < 42 ? .75 : .1) ? pick([T.leafO, T.leafO, T.leafR, T.leafY]) : T.leaves;
   for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let dy = -1; dy <= 2; dy++) {
     const d = Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 1.2;
     if (d <= 3.2 && !(dx === 0 && dz === 0 && dy <= 0) && rng() < .92) { if (!getV(x + dx, top + dy, z + dz)) setV(x + dx, top + dy, z + dz, LT); }
@@ -169,13 +184,12 @@ function place(fn, count, r, filt) {
 /* the stilt house on the sea, east side */
 let HOUSE = null;
 {
-  const [sx] = (() => { let x = CX + 8; const z = CZ + 4; for (; x < N - 14; x++) if (gh(x, z) <= -1) return [x]; return [CX + 30]; })();
-  const hx = sx + 1, hz = CZ + 2, W = 7, D = 6, py = 2;
+  const hx = 92, hz = 49, W = 7, D = 6, py = gh(95, 52) + 3;
   const x0 = hx, z0 = hz;
   for (let x = x0; x < x0 + W; x++) for (let z = z0; z < z0 + D; z++) { setV(x, py, z, T.planks); }
   for (const [px_, pz_] of [[x0, z0], [x0 + W - 1, z0], [x0, z0 + D - 1], [x0 + W - 1, z0 + D - 1], [x0 + 3, z0], [x0 + 3, z0 + D - 1]]) for (let y = gh(px_, pz_) + 1; y < py; y++) setV(px_, y, pz_, T.log);
   // pier to shore
-  for (let x = x0 - 1; x >= 4; x--) { if (gh(x, z0 + 2) >= py - 1) break; setV(x, py, z0 + 2, T.planks); setV(x, py, z0 + 3, T.planks); if ((x - x0) % 3 === 0) { for (let y = gh(x, z0 + 2) + 1; y < py; y++) setV(x, y, z0 + 2, T.log); } }
+  for (let x = x0 - 1; x >= x0 - 1; x--) { if (gh(x, z0 + 2) >= py - 1) break; setV(x, py, z0 + 2, T.planks); setV(x, py, z0 + 3, T.planks); if ((x - x0) % 3 === 0) { for (let y = gh(x, z0 + 2) + 1; y < py; y++) setV(x, y, z0 + 2, T.log); } }
   // walls (house on west half 5 wide), porch on the east
   for (let y = py + 1; y <= py + 3; y++) for (let x = x0; x < x0 + 5; x++) for (let z = z0; z < z0 + D; z++) {
     const edge = x === x0 || x === x0 + 4 || z === z0 || z === z0 + D - 1; if (!edge) continue;
@@ -196,7 +210,7 @@ used.push([HOUSE.x, HOUSE.z]);
 /* swing tree on the south beach */
 let SWING = null;
 {
-  const [bx, bz] = shoreFrom(0, -1, CX - 4, N - 3);
+  const [bx, bz] = shoreFrom(0, -1, CX + 36, N - 3);
   const tx_ = bx, tz_ = bz - 3, s = gh(tx_, tz_); const h = 7;
   for (let y = 1; y <= h; y++) setV(tx_, s + y, tz_, T.log);
   for (let k = 1; k <= 4; k++) setV(tx_ + k, s + h, tz_, T.log);          // branch
@@ -216,15 +230,24 @@ function bigTree(x, z, LT) {
   for (const [dx, dz] of [[-1, 0], [2, 1], [0, -1], [1, 2]]) for (let y = 1; y <= 2; y++) setV(x + dx, s + y, z + dz, T.log);
   perches.push({ x: x + 1, y: top + 6.2, z: z + 1, yaw: rnd(0, 6.28), cap: 2, kind: 'tree' });
 }
-bigTree(46, 110, T.leaves); bigTree(78, 111, T.leaves);
+function giant(x, z, H, R, LT, flip) {
+  const s = gh(x, z);
+  for (let y = 1; y <= H; y++) for (const [a, b] of [[0, 0], [1, 0], [0, 1], [1, 1], [flip, 0]]) setV(x + a, s + y, z + b, T.log);
+  const top = s + H;
+  for (let dx = -R - 2; dx <= R + 3; dx++) for (let dz = -R; dz <= R + 1; dz++) for (let dy = -4; dy <= R; dy++) {
+    const d = Math.hypot((dx - .5) * .9, (dz - .5) * .9, dy * 1.25 - 1);
+    if (d <= R + (hv(dx + x, dz * 3 + dy) - .5) * 3 && !(Math.abs(dx - .5) < 1.5 && Math.abs(dz - .5) < 1.5 && dy <= 0)) { if (!getV(x + dx, top + dy, z + dz)) setV(x + dx, top + dy, z + dz, rng() < .9 ? LT : T.leaves); }
+  }
+  for (const [dx, dz] of [[-1, 0], [2, 1], [0, -1], [1, 2], [-1, 1], [2, 0]]) for (let y = 1; y <= 2; y++) setV(x + dx, s + y, z + dz, T.log);
+  perches.push({ x: x + 1, y: top + R, z: z + 1, yaw: rnd(0, 6.28), cap: 2, kind: 'tree' });
+}
+giant(46, 108, 14, 6, T.leaves, -1); giant(78, 106, 15, 7, T.leaves, 2); giant(92, 90, 8, 6, T.leaves, 2);
 let NEST = null;
-place((x, z) => { const t = tree(x, z, true); NEST = { x: t.x + .5, z: t.z + .5, y: t.top + 3.2 }; }, 1, 6, (x, z) => Math.hypot(x - CX, z - CZ) < 14 && gh(x, z) >= 4);
-const onMain = (x, z) => Math.hypot((x - CX) / 27.2, (z - CZ) / 25.6) < 1.15 && z > 34;
-place((x, z) => tree(x, z, rng() < .4), 11, 5, (x, z) => gh(x, z) >= 3 && gh(x, z) <= 9 && onMain(x, z));
-place((x, z) => tree(x, z, rng() < .3), 22, 5, (x, z) => gh(x, z) >= 3 && gh(x, z) <= 9 && !onMain(x, z));
-place((x, z) => palm(x, z), 9, 4, (x, z) => gh(x, z) <= 3 && onMain(x, z));
-place((x, z) => palm(x, z), 14, 4, (x, z) => gh(x, z) <= 3 && !onMain(x, z));
-for (let k = 0; k < 16; k++) place((x, z) => bush(x, z), 1, 3, (x, z) => gh(x, z) >= 2 && gh(x, z) <= 9 && (Math.hypot(x - HOUSE.x, z - HOUSE.z) < 20 || rng() < .4));
+place((x, z) => { const t = tree(x, z, true); NEST = { x: t.x + .5, z: t.z + .5, y: t.top + 3.2 }; }, 1, 6, (x, z) => Math.abs(x - 46) < 10 && Math.abs(z - 52) < 4 && gh(x, z) >= 3);
+place((x, z) => tree(x, z, rng() < .3), 46, 3.2, (x, z) => z > 38 && z < 58 && gh(x, z) >= 2 && gh(x, z) <= 6 && Math.hypot(x - 95, z - 52) > 9);
+place((x, z) => tree(x, z, rng() < .3), 44, 3.2, (x, z) => z > 22 && z <= 40 && gh(x, z) >= 4 && gh(x, z) <= 20);
+place((x, z) => tree(x, z, rng() < .4), 12, 4, (x, z) => z > 60 && gh(x, z) >= 3 && gh(x, z) <= 8 && (x < 24 || x > 104));
+for (let k = 0; k < 10; k++) place((x, z) => bush(x, z), 1, 3, (x, z) => gh(x, z) >= 2 && gh(x, z) <= 9 && z > 40 && z < 60);
 // a few rocks
 place((x, z) => { const s = gh(x, z); for (const [dx, dz, dy] of [[0, 0, 1], [1, 0, 1], [0, 1, 1], [0, 0, 2]]) setV(x + dx, s + dy, z + dz, T.stone); }, 6, 5, (x, z) => gh(x, z) >= 2);
 
@@ -269,14 +292,14 @@ buildMesh();
 const FU = { value: 0 };
 function swayMat(m) { m.onBeforeCompile = sh => { sh.uniforms.uFT = FU; sh.vertexShader = 'uniform float uFT;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.x += sin(uFT*1.7 + instanceMatrix[3].x*.8 + instanceMatrix[3].z*.6) * .22 * (position.y); transformed.z += cos(uFT*1.3 + instanceMatrix[3].z*.7) * .12 * position.y;'); }; return m; }
 const bladeG = new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0);
-const fCells = []; for (let x = 1; x < N - 1; x++) for (let z = 1; z < N - 1; z++) { const sv = SURF[z * N + x]; if (sv >= 3 && sv <= 14) { const t = getV(x, sv, z); if ((t === T.grass || t === T.grassA) && !getV(x, sv + 1, z)) fCells.push([x, sv + 1, z, t === T.grassA]); } }
+const fCells = []; for (let x = 1; x < N - 1; x++) for (let z = 1; z < N - 1; z++) { const sv = SURF[z * N + x]; if (sv >= 2 && sv <= 22) { const t = getV(x, sv, z); if ((t === T.grass || t === T.grassA || t === T.grassO || t === T.grassR) && !getV(x, sv + 1, z)) fCells.push([x, sv + 1, z, t === T.grassA || t === T.grassO || t === T.grassR || z > 110]); } }
 const blades = new THREE.InstancedMesh(bladeG, swayMat(new THREE.MeshLambertMaterial({ color: 0xffffff })), fCells.length * 8);
 const flowH = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x222222 }), fCells.length);
 { const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(); let bi = 0, fi = 0;
   const GR = ['#4fa83a', '#62b845', '#7cc653', '#8fcf4a'], AU = ['#c9a63a', '#d8b848', '#e0933a', '#b8862e', '#c96a2a'], FL = ['#ff6fa8', '#ffffff', '#7fb2ff', '#ffe04a', '#b78bff', '#ff5a4a', '#ff9a3a'];
-  for (const [x, y, z, au] of fCells) { const n = z > 96 ? ri(4, 7) : (rng() < .75 ? ri(2, 4) : 1);
-    for (let k = 0; k < n; k++) { const h = rnd(.45, 1.15); v.set(x + rnd(.1, .9), y, z + rnd(.1, .9)); e.set(0, rnd(0, 6.28), 0); q.setFromEuler(e); sc.set(rnd(.07, .12), h, rnd(.07, .12)); m4.compose(v, q, sc); blades.setMatrixAt(bi, m4); blades.setColorAt(bi, col.set(au ? pick(AU) : pick(GR))); bi++; }
-    if (rng() < (z > 96 ? .45 : .13)) { const h = rnd(.5, .9); v.set(x + rnd(.2, .8), y + h - .1, z + rnd(.2, .8)); sc.set(.2, .2, .2); q.identity(); m4.compose(v, q, sc); flowH.setMatrixAt(fi, m4); flowH.setColorAt(fi, col.set(pick(FL))); fi++; } }
+  for (const [x, y, z, au] of fCells) { const n = z > 96 ? ri(5, 8) : (rng() < .75 ? ri(2, 4) : 1);
+    for (let k = 0; k < n; k++) { const h = z > 100 ? rnd(.25, .75) : rnd(.45, 1.15); v.set(x + rnd(.1, .9), y, z + rnd(.1, .9)); e.set(0, rnd(0, 6.28), 0); q.setFromEuler(e); sc.set(rnd(.05, .09), h, rnd(.05, .09)); m4.compose(v, q, sc); blades.setMatrixAt(bi, m4); blades.setColorAt(bi, col.set(au ? pick(AU) : pick(GR))); bi++; }
+    if (rng() < (z > 96 ? .6 : .13)) { const h = rnd(.35, .7); v.set(x + rnd(.2, .8), y + h - .1, z + rnd(.2, .8)); sc.set(.2, .2, .2); q.identity(); m4.compose(v, q, sc); flowH.setMatrixAt(fi, m4); flowH.setColorAt(fi, col.set(pick(FL))); fi++; } }
   blades.count = bi; flowH.count = fi; blades.instanceMatrix.needsUpdate = true; blades.instanceColor.needsUpdate = true; flowH.instanceMatrix.needsUpdate = true; if (flowH.instanceColor) flowH.instanceColor.needsUpdate = true;
   blades.frustumCulled = false; flowH.frustumCulled = false; scene.add(blades, flowH); }
 
@@ -312,7 +335,7 @@ function updParts(dt) { for (const q of PARTS) { if (!q.m.visible) continue; q.l
 const deep = [];
 for (let x = 2; x < N - 2; x++) for (let z = 2; z < N - 2; z++) if (SURF[z * N + x] <= -4) deep.push([x + .5, z + .5]);
 const nearestDeep = (x, z) => { let b = deep[0], bd = 1e9; for (const d of deep) { const q = (d[0] - x) ** 2 + (d[1] - z) ** 2; if (q < bd) { bd = q; b = d; } } return b; };
-const SEAC = (() => { { const q = nearestDeep(61, 104); return [q[0], q[1]]; } let sx = 0, sz = 0, c = 0; for (const d of deep) if (d[0] < N * .3) { sx += d[0]; sz += d[1]; c++; } return c ? [sx / c, sz / c] : [10, CZ]; })();
+const SEAC = (() => { { const q = nearestDeep(61, 88); return [q[0], q[1]]; } let sx = 0, sz = 0, c = 0; for (const d of deep) if (d[0] < N * .3) { sx += d[0]; sz += d[1]; c++; } return c ? [sx / c, sz / c] : [10, CZ]; })();
 const seaFloor = (x, z) => gh(x, z) + 1;
 
 /* ================= betta fish (blocky, flowing translucent fins) ================= */
@@ -603,18 +626,18 @@ const waterShader = { name: 'W', uniforms: { color: { value: null }, tDiffuse: {
   void main(){
     vec2 q = floor(vW.xz*3.)/3.;           // blocky ripples
     float e=.33; float h0=wave(q);
-    vec3 nrm = normalize(vec3((h0-wave(q+vec2(e,0.)))*1.3, 1., (h0-wave(q+vec2(0.,e)))*1.3));
+    vec3 nrm = normalize(vec3((h0-wave(q+vec2(e,0.)))*.6, 1., (h0-wave(q+vec2(0.,e)))*.6));
     vec3 V = normalize(cameraPosition - vW);
-    float fr = pow(1.-clamp(dot(nrm,V),0.,1.), 3.); fr = clamp(.16+fr*.84,0.,1.);
+    float fr = pow(1.-clamp(dot(nrm,V),0.,1.), 3.); fr = clamp(.34+fr*.66,0.,1.);
     vec3 R = reflect(-V,nrm); float ry = clamp(R.y,0.,1.);
-    vec3 refl = mix(uHor, uTop, pow(ry,.5)); vec2 ruv = vUv4.xy/vUv4.w + nrm.xz*.03; refl = mix(refl, texture2D(tDiffuse, ruv).rgb, uRefl);
+    vec3 refl = mix(uHor, uTop, pow(ry,.5)); vec2 ruv = vUv4.xy/vUv4.w + nrm.xz*.012; refl = mix(refl, texture2D(tDiffuse, ruv).rgb, uRefl);
     float sg = pow(clamp(dot(R,uSun),0.,1.), 220.)*2.2 + pow(clamp(dot(R,uSun),0.,1.), 14.)*.28;
     refl += uSunCol*sg*step(-.02,uSun.y);
     // depth from the voxel height map
     vec2 uv = vW.xz/uN; float g = texture2D(uH, clamp(uv,0.001,.999)).r*48.-12.;
     float inside = step(0.,uv.x)*step(uv.x,1.)*step(0.,uv.y)*step(uv.y,1.);
     float depth = mix(8., uWY-g, inside); depth = max(depth,0.);
-    vec3 shallow = vec3(.25,.85,.80), mid=vec3(.08,.50,.82), deep=vec3(.03,.16,.46);
+    vec3 shallow = vec3(.14,.55,.5), mid=vec3(.05,.3,.42), deep=vec3(.02,.12,.24);
     vec3 body = mix(shallow, mid, smoothstep(.2,2.2,depth)); body = mix(body, deep, smoothstep(2.,7.,depth));
     body *= (.25+.75*uDay) ;
     // caustics-like shimmer in the shallows
@@ -729,7 +752,7 @@ function updFlies(dt) { for (const f of flies) { f.a += dt * rnd(.4, .8) * .8; f
 const boat = new THREE.Group(); scene.add(boat);
 { mk(boat, 5, .5, 1.2, '#2f7f8a', 0, .3, 0); mk(boat, 1, .6, 1.1, '#2f7f8a', 2.8, .55, 0); mk(boat, 1, .7, 1.0, '#2f7f8a', -2.8, .6, 0); mk(boat, 5, .12, 1.3, '#d94a4a', 0, .62, 0); mk(boat, 1.8, 1.2, 1.1, '#f1e1b0', -.6, 1.2, 0); mk(boat, 2.1, .15, 1.3, '#d94a4a', -.6, 1.88, 0);
   mk(boat, 1.4, .12, .12, '#3a3a3a', -3.8, .4, 0); mk(boat, 1.8, .2, .2, '#222', -4.8, .4, 0); mk(boat, .4, .4, .4, '#ffcf6a', 2.6, 1.2, 0, { emissive: 0xffb040, emissiveIntensity: 1.2 }); }
-const BO = (() => { const q = nearestDeep(CX - 25, CZ + 22); return { x: q[0], z: q[1] }; })();
+const BO = (() => { const q = nearestDeep(84, 70); return { x: q[0], z: q[1] }; })();
 function updBoat(dt) { const t = simT; const dn = sceneState.dancing; boat.position.set(BO.x + Math.sin(t * .05) * 5, WATER_Y - .15 + Math.sin(t * 1.3) * .08 + (dn ? Math.abs(Math.sin(t * 5)) * .18 : 0), BO.z + Math.cos(t * .04) * 5);
   boat.rotation.set(Math.sin(t * .9) * .03 + (dn ? Math.sin(t * 2.5) * .06 : 0), .6 + Math.sin(t * .05) * .3, Math.sin(t * 1.1) * .025); }
 
