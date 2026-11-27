@@ -115,9 +115,9 @@ for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) {
   const farS = smooth(60 + wob * .4, 52 + wob * .4, z);
   h = lerp(h, 2.6 + n * 1.4, farS);
   const hill = smooth(47, 20, z);
-  h += hill * (12 * (.45 + .9 * rdg(x, z, 1.3)) + n * 3);
+  h += hill * (8 * (.45 + .9 * rdg(x, z, 1.3)) + n * 3);
   const mt = smooth(30, 8, z) * smooth(0, 10, x) * smooth(0, 10, N - x);
-  h += mt * (30 * Math.pow(rdg(x * .8, z * 1.2, 2.2), 1.8) * (.45 + .8 * fbm(x * .02 + 30, 5)) + fbm(x * .3, z * .3) * 6);
+  h += mt * (26 * Math.pow(rdg(x * .7, z * 1.1, 1.6), 2.4) * (.25 + 1.2 * smooth(.3, .7, fbm(x * .035 + 30, 5))) + fbm(x * .25, z * .25) * 7);
   SURF[z * N + x] = clamp(Math.floor(h), -7, 46);
 }
 const gh = (x, z) => SURF[clamp(Math.floor(z), 0, N - 1) * N + clamp(Math.floor(x), 0, N - 1)];
@@ -272,11 +272,11 @@ function buildMesh() {
       if (f !== 3 && f !== 2 && y < -1 && !nt && (nx < 0 || nx >= N || nz < 0 || nz >= N)) { /* edge of the world */ }
       const tile = TILES[t][f === 2 ? 0 : f === 3 ? 2 : 1];
       const u0 = (tile % AC) / AC, v0 = 1 - (Math.floor(tile / AC) + 1) / AR;
-      const base = P.length / 3; const sh = F.s * (1 + (hv(x + f, z * 3 + y) - .5) * .09);
+      const base = P.length / 3; const sh = F.s * (1 + (hv(x + f, z * 3 + y) - .5) * .09) * (t === T.snow ? 1.28 : 1);
       const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
       for (let k = 0; k < 4; k++) {
         P.push(x + F.v[k][0], y + F.v[k][1], z + F.v[k][2]); NO.push(...F.n);
-        UV.push(u0 + uvs[k][0] / AC * .998 + .0005, v0 + uvs[k][1] / AR * .998 + .0005); { const dk = clamp((-y - 1) / 6, 0, 1); CO.push(sh * (1 - dk * .85), sh * (1 - dk * .6), sh * (1 - dk * .25)); }
+        UV.push(u0 + uvs[k][0] / AC * .998 + .0005, v0 + uvs[k][1] / AR * .998 + .0005); { const dk = clamp((-y - 1) / 6, 0, 1); const sn = t === T.snow && f !== 2 ? 1 : 0; CO.push(sh * (1 - dk * .85) * (sn ? .86 : 1), sh * (1 - dk * .6) * (sn ? .94 : 1), sh * (1 - dk * .25) * (sn ? 1.1 : 1)); }
       }
       IX.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
@@ -335,7 +335,7 @@ function updParts(dt) { for (const q of PARTS) { if (!q.m.visible) continue; q.l
 const deep = [];
 for (let x = 2; x < N - 2; x++) for (let z = 2; z < N - 2; z++) if (SURF[z * N + x] <= -4) deep.push([x + .5, z + .5]);
 const nearestDeep = (x, z) => { let b = deep[0], bd = 1e9; for (const d of deep) { const q = (d[0] - x) ** 2 + (d[1] - z) ** 2; if (q < bd) { bd = q; b = d; } } return b; };
-const SEAC = (() => { { const q = nearestDeep(61, 88); return [q[0], q[1]]; } let sx = 0, sz = 0, c = 0; for (const d of deep) if (d[0] < N * .3) { sx += d[0]; sz += d[1]; c++; } return c ? [sx / c, sz / c] : [10, CZ]; })();
+const SEAC = (() => { { const q = nearestDeep(61, 84); return [q[0], q[1]]; } let sx = 0, sz = 0, c = 0; for (const d of deep) if (d[0] < N * .3) { sx += d[0]; sz += d[1]; c++; } return c ? [sx / c, sz / c] : [10, CZ]; })();
 const seaFloor = (x, z) => gh(x, z) + 1;
 
 /* ================= betta fish (blocky, flowing translucent fins) ================= */
@@ -353,7 +353,7 @@ const BETTA = [
 class Fish {
   constructor(p, i) {
     this.i = i; this.g = new THREE.Group(); scene.add(this.g); this.rig = grp(this.g); const r = this.rig;
-    this.sc = rnd(1.9, 2.6); this.g.scale.setScalar(this.sc);
+    this.sc = rnd(1.7, 2.3); this.g.scale.setScalar(this.sc);
     mk(r, 1.0, .5, .42, p.b); mk(r, .9, .12, .38, '#ffffff', -.02, -.2, 0, { transparent: true, opacity: .35 }, false);
     mk(r, .42, .42, .4, p.h, .66, .02, 0); mk(r, .16, .2, .26, p.h, .92, -.03, 0);
     for (const s of [-1, 1]) { mk(r, .11, .11, .06, '#ffffff', .78, .1, s * .2, 0, false); mk(r, .07, .08, .07, '#0a0a0a', .81, .1, s * .22, 0, false); }
@@ -370,7 +370,7 @@ class Fish {
     for (let j = 0; j < 3; j++) { const pl = mk(this.dors, .5 + j * .12, .55 - j * .08, .05, p.f[j], -.15 - j * .12, .2 - j * .06, 0, FINMAT, false); pl.rotation.z = -.2 - j * .15; pl.renderOrder = 1; }
     this.pec = [-1, 1].map(s => { const pv = grp(r, .42, -.1, s * .24); const pl = mk(pv, .34, .05, .3, p.f[1], -.12, 0, s * .12, FINMAT, false); pl.renderOrder = 1; return pv; });
     this.ven = grp(r, -.1, -.26, 0); for (let j = 0; j < 2; j++) { const pl = mk(this.ven, .6, .35, .05, p.f[2], -.2 - j * .15, -.12, 0, FINMAT, false); pl.rotation.z = .25 + j * .1; pl.renderOrder = 1; }
-    const sp = nearestDeep(SEAC[0] + rnd(-14, 14), SEAC[1] + rnd(-14, 14)); this.x = sp[0]; this.z = sp[1]; this.y = -rnd(1.3, 3.2);
+    const sp = nearestDeep(SEAC[0] + rnd(-14, 14), SEAC[1] + rnd(-14, 14)); this.x = sp[0]; this.z = sp[1]; this.y = -rnd(.9, 1.8);
     this.yaw = rnd(0, 6.28); this.speed = 1.3; this.base = rnd(1.1, 1.8); this.ph = rnd(0, 6); this.tx = this.x; this.tz = this.z; this.ty = this.y; this.wt = 0;
     this.jump = null; this.pitch = 0; this.bub = 0;
   }
@@ -414,7 +414,7 @@ class Fish {
     if (asleep && !fleeing) { this.bub -= dt; if (this.bub < 0) { this.bub = rnd(1.5, 3); puff(new THREE.Vector3(this.x, this.y + .5, this.z), 0xcfeeff, 1, .15, .9, .16, 2.5, -.5); } }
   }
 }
-function formation(i, n, t) {
+function formation0(i, n, t) {
   const [cx, cz] = SEAC; const B = audio.bass; const r = sceneState.routine; const a = i / n * Math.PI * 2;
   switch ((sceneState.glad > .3 ? r : 0) % 5) {
     case 0: { const R = 6.5 + 1.4 * B; return [cx + Math.cos(a + t * .7) * R, cz + Math.sin(a + t * .7) * R, -2.6 + Math.sin(a * 2 + t * 1.5) * .9]; }
@@ -424,7 +424,9 @@ function formation(i, n, t) {
     default: { const R = 2 + ((i * 1.7 + t * 1.2) % 8); const aa = a * 2 + t * 1.1 + R * .4; return [cx + Math.cos(aa) * R, cz + Math.sin(aa) * R, -1.6 - R * .22]; }
   }
 }
+function formation(i, n, t) { const q = formation0(i, n, t); return [SEAC[0] + (q[0] - SEAC[0]) * 1.9, q[1], q[2]]; }
 const fishes = []; for (let i = 0; i < 12; i++) fishes.push(new Fish(BETTA[i % BETTA.length], i));
+fishes.forEach(f => f.g.traverse(o => { if (o.isMesh) o.renderOrder = 3; }));
 
 /* ================= lovebirds ================= */
 const LOVE = [
@@ -678,11 +680,16 @@ const moonMesh = new THREE.Mesh(boxG, new THREE.MeshBasicMaterial({ color: 0xe8e
 const starsG = new THREE.BufferGeometry(); { const p = []; for (let i = 0; i < 700; i++) { const u = rng() * 6.283, v = rng() * .95 + .05; const r = 520; p.push(Math.cos(u) * Math.sqrt(1 - v * v) * r, v * r, Math.sin(u) * Math.sqrt(1 - v * v) * r); } starsG.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); }
 const stars = new THREE.Points(starsG, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(stars);
 const clouds = [];
-const cloudTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 4, 64, 64, 62); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(.45, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const cloudTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
+  const blobs = [[60, 80, 34], [100, 62, 42], [150, 60, 44], [196, 78, 34], [128, 84, 46], [84, 90, 30], [176, 92, 30]];
+  for (const [bx, by, r] of blobs) { const g = x.createRadialGradient(bx, by, r * .2, bx, by, r); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.6, 'rgba(255,255,255,.9)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(bx - r, by - r, r * 2, r * 2); }
+  x.globalCompositeOperation = 'source-atop'; const sg = x.createLinearGradient(0, 40, 0, 120); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(1, 'rgba(120,140,185,.75)'); x.fillStyle = sg; x.fillRect(0, 0, 256, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
 const cloudMat = new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, fog: false, opacity: .9 });
 for (let c = 0; c < 22; c++) { const g = new THREE.Group(); const k = ri(7, 12);
   for (let i = 0; i < k; i++) { const sp = new THREE.Sprite(cloudMat); const w = rnd(24, 44); sp.scale.set(w, w * rnd(.45, .62), 1); sp.position.set(rnd(-26, 26), rnd(-2, 4) + (1 - Math.abs(i - k / 2) / k) * 4, rnd(-9, 9)); g.add(sp); }
   g.position.set(rnd(-60, 280), rnd(46, 74), rnd(-30, 220)); scene.add(g); clouds.push({ g, sp: rnd(.8, 2) }); }
+for (const [cx_, cy_, cz_, w_] of [[40, 50, -10, 1.2], [66, 56, 0, 1.4], [92, 49, -6, 1.1]]) { const g = new THREE.Group(); for (let i = 0; i < 9; i++) { const sp = new THREE.Sprite(cloudMat); const w = rnd(22, 34) * w_; sp.scale.set(w, w * .5, 1); sp.position.set(rnd(-16, 16), rnd(-1, 4), rnd(-4, 4)); g.add(sp); } g.position.set(cx_, cy_, cz_); scene.add(g); clouds.push({ g, sp: .15 }); }
 /* fireflies */
 const FFN = 70, ffPos = new Float32Array(FFN * 3), ffBase = [];
 for (let i = 0; i < FFN; i++) { const b = i < 28 ? [rnd(34, 92), 9, rnd(100, 122)] : i < 50 && bushes.length ? pick(bushes) : [CX + rnd(-25, 25), 4, CZ + rnd(-25, 25)]; ffBase.push([b[0] + rnd(-3, 3), (b[1] || 4) + rnd(0, 3), b[2] + rnd(-3, 3), rnd(0, 6)]); }
@@ -712,7 +719,7 @@ scene.fog = new THREE.FogExp2(0xbfe3ff, .004);
 
 /* colour keys: [elevation, top, horizon] */
 const KEYS = [
-  [-.35, '#030615', '#0b1433'], [-.12, '#0a1240', '#26305f'], [-.03, '#2c2f6e', '#c8607a'], [.04, '#4a68b8', '#ff9a5e'], [.16, '#4d8ce0', '#ffd0a0'], [.4, '#3d8fee', '#bfe4ff'], [1, '#2f80ec', '#b6e0ff']
+  [-.35, '#030615', '#0b1433'], [-.12, '#0a1240', '#26305f'], [-.03, '#2c2f6e', '#c8607a'], [.04, '#4a68b8', '#ff9a5e'], [.16, '#4d8ce0', '#ffd0a0'], [.4, '#2a7ee8', '#b0dcff'], [1, '#1f6fe0', '#a4d4ff']
 ].map(k => [k[0], new THREE.Color(k[1]), new THREE.Color(k[2])]);
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function keyCols(el) { let i = 0; while (i < KEYS.length - 2 && el > KEYS[i + 1][0]) i++; const a = KEYS[i], b = KEYS[i + 1]; const t = clamp((el - a[0]) / (b[0] - a[0]), 0, 1);
@@ -826,7 +833,7 @@ composer.addPass(new OutputPass());
 const gradePass = new ShaderPass({ uniforms: { tDiffuse: { value: null }, uNight: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float uNight; varying vec2 vUv;
-   void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(.299,.587,.114)); c=mix(vec3(l),c,1.18); c=(c-.5)*1.07+.5; c*=mix(vec3(1.04,1.0,.95),vec3(.92,.98,1.08),uNight);
+   void main(){ vec3 c=texture2D(tDiffuse,vUv).rgb; float l=dot(c,vec3(.299,.587,.114)); c=mix(vec3(l),c,1.28); c=(c-.5)*1.07+.5; c*=mix(vec3(1.04,1.0,.95),vec3(.92,.98,1.08),uNight);
      float v=length(vUv-.5); c*=1.-smoothstep(.45,.95,v)*.28; gl_FragColor=vec4(clamp(c,0.,1.),1.); }` });
 composer.addPass(gradePass);
 let postOn = Q.get('post') !== '0';
