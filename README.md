@@ -1,68 +1,29 @@
-# Koi Pond 3D
+# Blocky Koi Island
 
-An interactive 3D koi pond that runs in any modern browser. Real-time WebGL (three.js): realistic koi with scaled skin and fin rays, refractive water with caustics and sun glints, a pebble pond floor, lily pads and lotus flowers.
+A Minecraft-style voxel island and sea that runs by itself as a living laptop wallpaper. Built with three.js. All textures and models are original, drawn in code.
 
-**Live:** https://ahmedbadawix77x-gif.github.io/koi-pond/
+Live: https://ahmedbadawix77x-gif.github.io/koi-pond/
 
+## What happens on its own (no buttons)
+- A full day cycle: sunrise, morning, noon, sunset, night with stars, moon and fireflies. One day is about 2.5 minutes (`?dayLen=` to change).
+- Betta-style blocky fish with flowing translucent fins swim in the sea. They flee when the mouse gets close.
+- Lovebird pairs perch in the trees, on the beach house and on the swing. A pair builds a nest, lays eggs, a chick hatches and fledges over several days.
+- A sea turtle lays eggs on the beach at dusk, and hatchlings walk to the sea at sunrise. Crabs, butterflies and a longtail boat too.
+- At night the fish, birds and crabs sleep (with little Z bubbles).
+- Music: when sound is heard, the fish dance in circles, rings, hearts and gathering swirls, fish jump on the beat, birds hop and fly in orbits, the boat bobs. With no music the island still puts on a short dance show every minute or two.
+- Rendering: bloom, god rays, soft shadows, a water shader (blocky ripples, shore foam, depth colour, sun glints), sharp at device pixel ratio. Quality adapts to keep the frame rate smooth.
 
-## What you can do
+## Music
+Browsers only allow audio listening after permission. On the first click or key press the page asks for the microphone, which hears whatever your speakers play. Add `?mic=0` to skip that. `?music=1` runs a demo beat.
 
-| Action | Result |
-| --- | --- |
-| Move the mouse | A ring follows the cursor on the water. The fish swim away from it. |
-| Click or tap | Drops food. Nearby fish swim over, eat it and leave ripples. |
-| `S` or the Swimsuits button | Puts tiny swimsuits on the koi (bikinis and swim trunks in different prints). |
-| `M` or the Music button | Opens the music mode menu (see below). |
-| `F` or the Fullscreen button | Fullscreen. |
-| `Space` | Pause. |
-| `H` | Hide or show the buttons. |
+## Use as a Windows wallpaper
+1. Install Lively Wallpaper (free, Microsoft Store).
+2. Add Wallpaper, paste the live link above, and set it.
+Or open the link in Chrome or Edge and press F11 for fullscreen.
 
+## Options (URL)
+`?tod=0.25` fixed time of day (0 sunrise, 0.25 noon, 0.5 sunset, 0.75 night), `?pr=1` pixel ratio, `?post=0` no post effects, `?seed=`, `?life=`, `?dayLen=`.
 
-## Music mode: how to use it
-
-The fish listen to your music and dance. They do group routines (circle, figure eight, bloom, conga line) and kick, flap and splash on every beat. The water glows with the bass.
-
-1. Start your music on your laptop (Spotify, YouTube, anything).
-2. Open the pond and click **Music mode**.
-3. Pick one option:
-   - **Tab / system audio (best).** Your browser asks what to share. Choose the tab that plays the music and tick **Share tab audio**. On Windows with Chrome or Edge you can also pick **Entire screen** and tick **Share system audio**. The video part is ignored, only the sound is used.
-   - **Microphone.** Allow the microphone and play the music out loud from the speakers. Works in every browser.
-   - **Demo beat.** A fake 120 BPM beat, to see the dance without any audio.
-4. Click the pink **Music on** button to stop.
-
-Notes: tab and system audio sharing works in Chrome and Edge on desktop. Firefox and Safari only support the microphone option. The audio is analysed in your browser and never recorded or sent anywhere. Opening `index.html` from a file works for the demo, but the audio options need the page served over `https` or `http://localhost` (the live link above works).
-
-
-## Run it
-
-No build step. The page loads three.js from a CDN, and browsers need it served over HTTP:
-
-```
-python3 -m http.server 8000
-# then open http://localhost:8000
-```
-
-Or use the GitHub Pages link above. It needs an internet connection to load three.js.
-
-## Use as a wallpaper
-
-- Windows: open the live link fullscreen (`F`), or use Lively Wallpaper and point it at the live link. Add `?ui=0` to the link to hide the buttons.
-- macOS: Plash or a similar web-wallpaper app.
-
-## URL options
-
-- `?ui=0` hides the buttons.
-- `?suits=1` starts with swimsuits on.
-- `?music=1` starts the demo beat.
-- `?seed=5` changes the layout of the pads and the fish.
-
-## Older version
-
-The first version (pixel art) is kept in `pixel-art-v1.html` and in the git history of this repo.
-
-## Files
-
-- `index.html`: the app.
-- `pixel-art-v1.html`: the original pixel-art pond.
-
-Inspired by a "koi pond wallpaper" reel by @karimeltalawii.
+## Older versions
+- `koi-pond-3d-v2.html`: realistic 3D koi pond
+- `pixel-art-v1.html`: original pixel version
