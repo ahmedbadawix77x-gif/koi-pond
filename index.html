@@ -710,8 +710,8 @@ function updateSky() {
   moonMesh.position.copy(mdir).multiplyScalar(430).add(camera.position); moonMesh.visible = mdir.y > -.05; moonMesh.lookAt(camera.position);
   sky.position.copy(camera.position); stars.position.copy(camera.position); stars.material.opacity = smooth(.0, -.2, SUN.y) * .95;
   sunL.position.copy(SUN).multiplyScalar(120).add(sunL.target.position); sunL.color.copy(sunCol); sunL.intensity = 2.6 * smooth(-.02, .22, SUN.y) * (1 - .45 * sceneState.sad);
-  moonL.position.copy(mdir).multiplyScalar(120).add(moonL.target.position); moonL.intensity = .55 * smooth(.0, .3, mdir.y) * night + .0;
-  hemi.color.copy(topCol).lerp(new THREE.Color(1, 1, 1), .5); hemi.groundColor.set(0x6a5a40).lerp(new THREE.Color(0x151a33), night); hemi.intensity = lerp(.32, .95, dayW) + .08 * warm;
+  moonL.position.copy(mdir).multiplyScalar(120).add(moonL.target.position); moonL.intensity = 1.5 * smooth(.0, .3, mdir.y) * night + .0;
+  hemi.color.copy(topCol).lerp(new THREE.Color(1, 1, 1), .5); hemi.groundColor.set(0x6a5a40).lerp(new THREE.Color(0x151a33), night); hemi.intensity = lerp(.85, .95, dayW) + .08 * warm;
   scene.fog.color.copy(horCol); scene.fog.density = lerp(.0026, .004, night); wU.fogColor.value.copy(horCol); wU.fogDensity.value = scene.fog.density; wU.uDay.value = clamp(.1 + dayW, 0, 1);
   lamp.intensity = 40 * night; cloudMat.color.copy(horCol).lerp(new THREE.Color(1, 1, 1), .55 * dayW + .1).multiplyScalar(lerp(.35, 1, dayW)); ffM.opacity = night * .9;
   godU.uStrength.value = lerp(.0, .55, smooth(-.02, .12, SUN.y)) * (1 + warm * .6);
