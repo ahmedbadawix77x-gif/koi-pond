@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Koi Pond</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2fb7c9; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; cursor: none; touch-action: none; }
+  #hint { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); font: 13px system-ui, sans-serif;
+          color: #fff; background: rgba(0,60,80,.45); padding: 6px 14px; border-radius: 20px; transition: opacity 1.5s; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">Move to ripple the water. Click to drop food. F = fullscreen. Space = pause.</div>
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const PIX = 3;                       // one "pixel" of the pond = 3 screen pixels
+  let W, H, img, pondBuf;
+  const mouse = { x: -999, y: -999, active: false };
+  const food = [];                     // pellets on the water
+  const ripples = [];                  // expanding rings
+  let paused = false;
+
+  function resize() {
+    W = Math.ceil(innerWidth / PIX);
+    H = Math.ceil(innerHeight / PIX);
+    canvas.width = W; canvas.height = H;
+    img = ctx.createImageData(W, H);
+    initWorld();
+  }
+
+  // ---------- helpers ----------
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[(Math.random() * a.length) | 0];
+  const TAU = Math.PI * 2;
+  function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; }
+
+  // ---------- water (caustics) ----------
+  let t = 0;
+  function drawWater() {
+    const d = img.data;
+    let i = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++, i += 4) {
+        const fx = x * 0.028, fy = y * 0.028;
+        const wx = fx + Math.sin(fy * 1.7 + t * 0.6) * 0.9 + Math.sin(fy * 0.6 - t * 0.35) * 1.4;
+        const wy = fy + Math.cos(fx * 1.5 + t * 0.5) * 0.9 + Math.cos(fx * 0.55 + t * 0.3) * 1.4;
+        // two layers of cell-like light lines
+        const a = Math.abs(Math.sin(wx * 2.1 + Math.sin(wy * 1.3)));
+        const b = Math.abs(Math.sin(wy * 2.3 + Math.sin(wx * 1.1 + t * 0.2)));
+        const line = Math.min(a, b);
+        const bands = Math.sin(wx * 0.9 + wy * 0.7) * 0.5 + 0.5;      // big soft waves
+        let r = 38 + bands * 22, g = 178 + bands * 20, bl = 205 + bands * 16;
+        if (line < 0.22) { const k = (0.22 - line) / 0.22; r += 105 * k * k; g += 50 * k * k; bl += 35 * k * k; }
+        d[i] = r; d[i + 1] = g; d[i + 2] = bl; d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // ---------- fish ----------
+  const PALETTES = [
+    { base: '#f4f1ea', spots: ['#e8412c', '#e8412c', '#1d1d22'] },   // kohaku / showa
+    { base: '#f4f1ea', spots: ['#e8412c'] },                          // kohaku
+    { base: '#f29a2e', spots: ['#f7d23e', '#ffffff'] },               // orange
+    { base: '#f7c531', spots: ['#f29a2e'] },                          // yellow
+    { base: '#232329', spots: ['#f7c531', '#f7c531', '#ffffff'] },    // black gold
+    { base: '#b8642e', spots: ['#8a4220', '#d98b4e'] },               // brown
+    { base: '#f4f1ea', spots: ['#1d1d22', '#e8412c'] },
+  ];
+  const fishes = [];
+  const SEG = 9;
+
+  function makeFish() {
+    const pal = pick(PALETTES);
+    const size = rnd(1.15, 1.7);
+    const f = {
+      x: rnd(0, W), y: rnd(0, H), ang: rnd(0, TAU),
+      speed: rnd(0.22, 0.4), size, pal,
+      phase: rnd(0, TAU), turn: 0, wander: rnd(0, 1000),
+      segs: [], colors: [],
+    };
+    for (let s = 0; s < SEG; s++) {
+      f.segs.push({ x: f.x - Math.cos(f.ang) * s * 2.2 * size, y: f.y - Math.sin(f.ang) * s * 2.2 * size });
+      f.colors.push(Math.random() < 0.45 ? pick(pal.spots) : pal.base);
+    }
+    return f;
+  }
+
+  // body radius profile head -> tail
+  const PROFILE = [2.7, 3.5, 3.9, 3.6, 3.0, 2.3, 1.6, 1.1, 0.7];
+
+  function updateFish(f, dt) {
+    f.phase += dt * 0.07 * (f.speed / 0.3 + 0.5);
+    f.wander += dt * 0.01;
+    let desired = f.ang + Math.sin(f.wander * 1.3) * 0.02;
+    let boost = 1;
+
+    // avoid the cursor ring
+    if (mouse.active) {
+      const dx = f.x - mouse.x, dy = f.y - mouse.y, dist = Math.hypot(dx, dy);
+      if (dist < 34) {
+        const away = Math.atan2(dy, dx);
+        desired = f.ang + angDiff(f.ang, away) * 0.12;
+        boost = 1 + (34 - dist) / 34 * 1.6;
+      }
+    }
+    // chase nearest food
+    let target = null, best = 1e9;
+    for (const p of food) {
+      const dd = Math.hypot(p.x - f.x, p.y - f.y);
+      if (dd < best && dd < 140) { best = dd; target = p; }
+    }
+    if (target) {
+      const to = Math.atan2(target.y - f.y, target.x - f.x);
+      desired = f.ang + angDiff(f.ang, to) * 0.09;
+      boost = Math.max(boost, 1.5);
+      if (best < 3.5) { target.eaten = true; ripples.push({ x: target.x, y: target.y, r: 1, max: 12, life: 1 }); }
+    }
+    // soft edge steering
+    const m = 22;
+    if (f.x < m || f.x > W - m || f.y < m || f.y > H - m) {
+      const toC = Math.atan2(H / 2 - f.y, W / 2 - f.x);
+      desired = f.ang + angDiff(f.ang, toC) * 0.06;
+    }
+    f.ang += Math.max(-0.045, Math.min(0.045, angDiff(f.ang, desired))) * dt;
+    const v = f.speed * boost * dt * (0.8 + 0.25 * Math.sin(f.phase * 2));
+    f.x += Math.cos(f.ang) * v;
+    f.y += Math.sin(f.ang) * v;
+    // wrap if it escaped far
+    if (f.x < -30) f.x = W + 20; if (f.x > W + 30) f.x = -20;
+    if (f.y < -30) f.y = H + 20; if (f.y > H + 30) f.y = -20;
+
+    // chain follow with swim wave
+    let prev = { x: f.x, y: f.y };
+    f.segs[0].x = f.x; f.segs[0].y = f.y;
+    const gap = 2.1 * f.size;
+    for (let s = 1; s < SEG; s++) {
+      const sg = f.segs[s];
+      let dx = sg.x - prev.x, dy = sg.y - prev.y;
+      const L = Math.hypot(dx, dy) || 1;
+      sg.x = prev.x + dx / L * gap;
+      sg.y = prev.y + dy / L * gap;
+      // lateral wiggle growing toward tail
+      const wob = Math.sin(f.phase - s * 0.7) * 0.12 * s * boost;
+      sg.x += -Math.sin(f.ang) * wob * 0.2;
+      sg.y += Math.cos(f.ang) * wob * 0.2;
+      prev = sg;
+    }
+  }
+
+  function drawFish(f) {
+    const sz = f.size;
+    const shadow = (dx, dy, col, alpha) => {};
+    // shadow on the water floor
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = '#04485a';
+    for (let s = 0; s < SEG; s++) {
+      ctx.beginPath(); ctx.arc(f.segs[s].x + 3, f.segs[s].y + 4, PROFILE[s] * sz, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // pectoral fins
+    const head = f.segs[1], neck = f.segs[2];
+    const fa = Math.atan2(neck.y - f.segs[3].y, neck.x - f.segs[3].x);
+    const flap = Math.sin(f.phase * 1.6) * 0.35;
+    ctx.fillStyle = f.pal.base === '#232329' ? '#d9a62a' : 'rgba(255,255,255,.85)';
+    for (const side of [-1, 1]) {
+      const a = fa + side * (1.2 + flap * side);
+      ctx.beginPath();
+      ctx.ellipse(neck.x + Math.cos(a) * 3.3 * sz, neck.y + Math.sin(a) * 3.3 * sz, 2.8 * sz, 1.1 * sz, a, 0, TAU);
+      ctx.fill();
+    }
+    // tail fin (fan of 3 lobes)
+    const tail = f.segs[SEG - 1], pre = f.segs[SEG - 3];
+    const ta = Math.atan2(tail.y - pre.y, tail.x - pre.x);
+    const sway = Math.sin(f.phase - SEG * 0.7) * 0.35;
+    ctx.fillStyle = 'rgba(255,255,255,.8)';
+    for (const k of [-0.55, 0, 0.55]) {
+      const a = ta + k + sway;
+      ctx.beginPath();
+      ctx.ellipse(tail.x + Math.cos(a) * 3.2 * sz, tail.y + Math.sin(a) * 3.2 * sz, 2.8 * sz, 1.2 * sz, a, 0, TAU);
+      ctx.fill();
+    }
+    // body: back to front so head overlaps
+    for (let s = SEG - 1; s >= 0; s--) {
+      const sg = f.segs[s];
+      ctx.fillStyle = f.colors[s];
+      ctx.beginPath(); ctx.arc(sg.x, sg.y, PROFILE[s] * sz, 0, TAU); ctx.fill();
+    }
+    // dark outline-ish highlight: tiny eyes
+    const ha = Math.atan2(f.segs[0].y - f.segs[2].y, f.segs[0].x - f.segs[2].x);
+    ctx.fillStyle = '#111';
+    for (const side of [-1, 1]) {
+      const a = ha + side * 1.05;
+      ctx.fillRect(Math.round(f.segs[0].x + Math.cos(a) * 2.1 * sz), Math.round(f.segs[0].y + Math.sin(a) * 2.1 * sz), 1, 1);
+    }
+  }
+
+  // ---------- lily pads ----------
+  let pads = [];
+  function makePads() {
+    pads = [];
+    const n = Math.max(5, Math.round(W * H / 9000));
+    for (let i = 0; i < n; i++) {
+      pads.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(6, 11), rot: rnd(0, TAU), bob: rnd(0, TAU), flower: Math.random() < 0.55 });
+    }
+  }
+  function drawPad(p) {
+    const x = p.x + Math.sin(t * 0.3 + p.bob) * 0.8, y = p.y + Math.cos(t * 0.27 + p.bob) * 0.8;
+    ctx.globalAlpha = 0.18; ctx.fillStyle = '#04485a';
+    ctx.beginPath(); ctx.arc(x + 3, y + 4, p.r, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#3d9a3c';
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.arc(x, y, p.r, p.rot + 0.35, p.rot + TAU - 0.35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#58b94c';
+    ctx.beginPath(); ctx.arc(x - p.r * 0.15, y - p.r * 0.15, p.r * 0.7, 0, TAU); ctx.fill();
+    if (p.flower) {
+      ctx.fillStyle = '#f7a8c4';
+      ctx.beginPath(); ctx.arc(x, y, p.r * 0.38, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ffd6e4';
+      ctx.beginPath(); ctx.arc(x, y, p.r * 0.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#f2c230';
+      ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+  }
+
+  // ---------- ripples, food, cursor ----------
+  function drawRipples(dt) {
+    ctx.lineWidth = 1;
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.r += 0.35 * dt; r.life = 1 - r.r / r.max;
+      if (r.life <= 0) { ripples.splice(i, 1); continue; }
+      ctx.strokeStyle = `rgba(255,255,255,${(r.life * 0.7).toFixed(2)})`;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+    }
+  }
+  function drawFood(dt) {
+    for (let i = food.length - 1; i >= 0; i--) {
+      const p = food[i];
+      p.age += dt;
+      if (p.eaten || p.age > 1500) { food.splice(i, 1); continue; }
+      ctx.fillStyle = '#c98a3a';
+      ctx.fillRect(Math.round(p.x + Math.sin(t + p.s) * 0.5), Math.round(p.y), 2, 2);
+    }
+  }
+  let lastRingT = 0;
+  function drawCursor() {
+    if (!mouse.active) return;
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 26 + Math.sin(t * 2) * 1.2, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.25)';
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 33 + Math.sin(t * 2 + 1) * 1.5, 0, TAU); ctx.stroke();
+  }
+
+  function initWorld() {
+    fishes.length = 0;
+    const n = Math.max(7, Math.min(18, Math.round(W * H / 7500)));
+    for (let i = 0; i < n; i++) fishes.push(makeFish());
+    makePads();
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    let dt = Math.min(3, (now - last) / 16.667); last = now;
+    if (paused) return;
+    t += dt * 0.016;
+    drawWater();
+    for (const f of fishes) updateFish(f, dt);
+    for (const f of fishes) drawFish(f);
+    drawFood(dt);
+    for (const p of pads) drawPad(p);
+    drawRipples(dt);
+    drawCursor();
+  }
+
+  // ---------- input ----------
+  function setMouse(e) {
+    mouse.x = e.clientX / PIX; mouse.y = e.clientY / PIX; mouse.active = true;
+  }
+  addEventListener('pointermove', e => {
+    setMouse(e);
+    const n = performance.now();
+    if (n - lastRingT > 140) { ripples.push({ x: mouse.x, y: mouse.y, r: 4, max: 16, life: 1 }); lastRingT = n; }
+  });
+  addEventListener('pointerdown', e => {
+    setMouse(e);
+    for (let i = 0; i < 5; i++) food.push({ x: mouse.x + rnd(-5, 5), y: mouse.y + rnd(-5, 5), age: 0, s: rnd(0, 6) });
+    ripples.push({ x: mouse.x, y: mouse.y, r: 2, max: 22, life: 1 });
+  });
+  addEventListener('pointerleave', () => { mouse.active = false; });
+  addEventListener('keydown', e => {
+    if (e.key === 'f' || e.key === 'F') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+    if (e.key === ' ') { paused = !paused; e.preventDefault(); }
+  });
+  addEventListener('resize', resize);
+  setTimeout(() => { document.getElementById('hint').style.opacity = 0; }, 6000);
+
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
